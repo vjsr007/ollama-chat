@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import ArgumentEditor from './ArgumentEditor';
 
 interface McpTool {
   name: string;
@@ -7,6 +8,8 @@ interface McpTool {
     type: string;
     required?: boolean;
     description?: string;
+    enum?: string[];
+    default?: any;
   }>;
   origin?: string;
 }
@@ -169,21 +172,16 @@ export const McpTools: React.FC<McpToolsProps> = ({ onToolCall }) => {
             </div>
             
             {Object.entries(selectedToolSchema).map(([argName, argDef]) => (
-              <div key={argName} className="form-group">
-                <label>
-                  {argName} 
-                  {argDef.required && <span className="required">*</span>}
-                </label>
-                <input
-                  type="text"
-                  placeholder={argDef.description}
-                  value={toolArgs[argName] || ''}
-                  onChange={(e) => setToolArgs(prev => ({
-                    ...prev,
-                    [argName]: e.target.value
-                  }))}
-                />
-              </div>
+              <ArgumentEditor
+                key={argName}
+                argName={argName}
+                argDef={argDef}
+                value={toolArgs[argName]}
+                onChange={(value) => setToolArgs(prev => ({
+                  ...prev,
+                  [argName]: value
+                }))}
+              />
             ))}
             
             <button 

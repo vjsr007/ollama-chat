@@ -4,6 +4,7 @@ import { ChatMessage } from '../shared/domain/chat';
 import { McpTools } from './components/McpTools';
 import MessageContent from './components/MessageContent';
 import ToolManager from './components/ToolManager';
+import ModelManager from './components/ModelManager';
 import type { McpToolCall, McpToolResult } from '../shared/domain/mcp';
 import './styles.css';
 
@@ -17,6 +18,7 @@ const App: React.FC = () => {
   const [systemPrompt, setSystemPrompt] = useState('You are a helpful assistant.');
   const [activeTab, setActiveTab] = useState<'chat' | 'tools'>('chat');
   const [isToolManagerOpen, setIsToolManagerOpen] = useState(false);
+  const [isModelManagerOpen, setIsModelManagerOpen] = useState(false);
   const [toolsStatus, setToolsStatus] = useState<{ enabled: number; total: number; limit: number } | null>(null);
   const chatRef = useRef<HTMLDivElement | null>(null);
 
@@ -157,6 +159,13 @@ const App: React.FC = () => {
           >
             ⚙️ Configurar
           </button>
+          <button 
+            className="tab-btn model-manager-btn"
+            onClick={() => setIsModelManagerOpen(true)}
+            title="Gestionar modelos externos (OpenAI, Anthropic, GitHub Copilot)"
+          >
+            🌐 Modelos
+          </button>
         </div>
         <div className="actions">
           <button onClick={() => setMessages([])} disabled={!messages.length || isLoading}>Clear</button>
@@ -237,6 +246,11 @@ const App: React.FC = () => {
           loadToolsStatus(); // Recargar estado después de cerrar
         }}
         currentModel={model}
+      />
+      
+      <ModelManager 
+        isOpen={isModelManagerOpen}
+        onClose={() => setIsModelManagerOpen(false)}
       />
     </div>
   );

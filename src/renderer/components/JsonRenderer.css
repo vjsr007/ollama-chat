@@ -1,0 +1,260 @@
+/* JsonRenderer.css */
+.json-renderer {
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.4;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.json-controls {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.4);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.json-control-btn {
+  background: rgba(71, 118, 230, 0.2);
+  border: 1px solid rgba(71, 118, 230, 0.4);
+  color: rgba(71, 118, 230, 1);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.json-control-btn:hover {
+  background: rgba(71, 118, 230, 0.3);
+  color: white;
+}
+
+.json-content {
+  padding: 16px;
+  max-height: 600px;
+  overflow-y: auto;
+  color: #e2e8f0;
+}
+
+/* Tipos de datos JSON */
+.json-string {
+  color: #98d982;
+}
+
+.json-number {
+  color: #79c0ff;
+}
+
+.json-boolean {
+  color: #ffa657;
+}
+
+.json-null {
+  color: #f85149;
+  font-style: italic;
+}
+
+.json-key {
+  color: #7dd3fc;
+  font-weight: 500;
+}
+
+.json-colon {
+  color: #cbd5e1;
+}
+
+.json-comma {
+  color: #cbd5e1;
+}
+
+.json-bracket {
+  color: #fbbf24;
+  font-weight: bold;
+}
+
+.json-expandable {
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+  position: relative;
+}
+
+.json-expandable:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+}
+
+.json-expandable:before {
+  content: "▶";
+  font-size: 10px;
+  margin-right: 4px;
+  transition: transform 0.2s ease;
+  display: inline-block;
+}
+
+.json-expandable.expanded:before {
+  transform: rotate(90deg);
+}
+
+.json-preview {
+  color: #64748b;
+  font-style: italic;
+  margin-left: 4px;
+}
+
+.json-truncated {
+  color: #64748b;
+  font-style: italic;
+}
+
+.json-unknown {
+  color: #f472b6;
+}
+
+/* Contenedores de objetos y arrays */
+.json-object,
+.json-array {
+  display: inline-block;
+}
+
+.json-object-content,
+.json-array-content {
+  margin-left: 20px;
+  margin-top: 4px;
+  margin-bottom: 4px;
+}
+
+.json-object-item,
+.json-array-item {
+  margin: 2px 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.json-array-index {
+  color: #64748b;
+  font-size: 11px;
+  min-width: 20px;
+}
+
+/* Estilos para imágenes */
+.json-image-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  max-width: 100%;
+}
+
+.json-image-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.json-image {
+  max-width: 200px;
+  max-height: 150px;
+  object-fit: contain;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.json-image:hover {
+  transform: scale(1.05);
+}
+
+.json-image-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.json-image-label {
+  color: #60a5fa;
+  font-weight: 500;
+  font-size: 12px;
+}
+
+.json-image-size {
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.json-image-raw {
+  margin-top: 8px;
+}
+
+.json-image-raw summary {
+  color: #94a3b8;
+  font-size: 11px;
+  cursor: pointer;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.json-image-raw summary:hover {
+  color: #cbd5e1;
+}
+
+.json-image-fallback {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 4px;
+}
+
+/* Scroll personalizado */
+.json-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.json-content::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.json-content::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+
+.json-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .json-image {
+    max-width: 150px;
+    max-height: 100px;
+  }
+  
+  .json-image-preview {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .json-controls {
+    flex-wrap: wrap;
+  }
+  
+  .json-control-btn {
+    font-size: 10px;
+    padding: 3px 6px;
+  }
+}

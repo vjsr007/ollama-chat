@@ -1,0 +1,241 @@
+/* ArgumentEditor.css */
+.argument-editor {
+  margin-bottom: 16px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  transition: border-color 0.2s ease;
+}
+
+.argument-editor:focus-within {
+  border-color: rgba(71, 118, 230, 0.4);
+}
+
+.arg-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.arg-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+  color: #e2e8f0;
+  font-size: 14px;
+}
+
+.arg-icon {
+  font-size: 16px;
+}
+
+.arg-name {
+  color: #7dd3fc;
+}
+
+.arg-type {
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: normal;
+}
+
+.required {
+  color: #ef4444;
+  font-weight: bold;
+  margin-left: 2px;
+}
+
+.arg-controls {
+  display: flex;
+  gap: 4px;
+}
+
+.mode-toggle,
+.default-btn,
+.clear-btn {
+  background: rgba(71, 118, 230, 0.2);
+  border: 1px solid rgba(71, 118, 230, 0.3);
+  color: #60a5fa;
+  padding: 4px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mode-toggle:hover,
+.default-btn:hover,
+.clear-btn:hover {
+  background: rgba(71, 118, 230, 0.3);
+  color: white;
+}
+
+.mode-toggle.active {
+  background: rgba(71, 118, 230, 0.4);
+  color: white;
+}
+
+.clear-btn {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #f87171;
+}
+
+.clear-btn:hover {
+  background: rgba(239, 68, 68, 0.3);
+  color: white;
+}
+
+.arg-description {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-bottom: 8px;
+  font-style: italic;
+}
+
+.arg-input-container {
+  margin-bottom: 6px;
+}
+
+.arg-input,
+.arg-select,
+.arg-textarea {
+  width: 100%;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  color: white;
+  font-size: 13px;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  transition: border-color 0.2s ease;
+}
+
+.arg-input:focus,
+.arg-select:focus,
+.arg-textarea:focus {
+  outline: none;
+  border-color: rgba(71, 118, 230, 0.5);
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.arg-textarea {
+  resize: vertical;
+  min-height: 60px;
+  line-height: 1.4;
+}
+
+.arg-textarea.error {
+  border-color: rgba(239, 68, 68, 0.5);
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.arg-select {
+  cursor: pointer;
+}
+
+.arg-select option {
+  background: #1a202c;
+  color: white;
+}
+
+.arg-boolean {
+  padding: 4px 0;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #e2e8f0;
+}
+
+.checkbox-label input[type="checkbox"] {
+  display: none;
+}
+
+.checkbox-custom {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 3px;
+  position: relative;
+  transition: all 0.2s ease;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.checkbox-label input[type="checkbox"]:checked + .checkbox-custom {
+  background: #4f46e5;
+  border-color: #4f46e5;
+}
+
+.checkbox-label input[type="checkbox"]:checked + .checkbox-custom::after {
+  content: "✓";
+  position: absolute;
+  top: -2px;
+  left: 3px;
+  color: white;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.arg-json-container {
+  position: relative;
+}
+
+.json-error {
+  color: #ef4444;
+  font-size: 11px;
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.arg-default {
+  font-size: 11px;
+  color: #64748b;
+  font-style: italic;
+}
+
+.arg-default code {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 2px 4px;
+  border-radius: 2px;
+  font-size: 10px;
+  color: #94a3b8;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .arg-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  
+  .arg-controls {
+    align-self: flex-end;
+  }
+  
+  .arg-label {
+    font-size: 13px;
+  }
+  
+  .arg-input,
+  .arg-select,
+  .arg-textarea {
+    font-size: 12px;
+    padding: 6px 8px;
+  }
+}

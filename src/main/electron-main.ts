@@ -3,6 +3,7 @@ import path from 'path';
 // MCP Manager
 import { McpManager } from '../shared/infrastructure/mcp/McpManager';
 import ToolConfigManager from './tool-config';
+import { ExternalModelManager } from './external-models';
 // Dynamic resolution of OllamaClient considering different build structures
 let OllamaClientMod: any;
 const candidatePaths = [
@@ -32,6 +33,7 @@ let mainWindow: BrowserWindow | null = null;
 const ollama = new OllamaClient();
 const mcpManager = new McpManager(process.cwd());
 const toolConfigManager = new ToolConfigManager();
+const externalModelManager = new ExternalModelManager();
 
 async function createWindow() {
   mainWindow = new BrowserWindow({
@@ -85,7 +87,16 @@ app.on('window-all-closed', () => {
 });
 
 ipcMain.handle('models:list', async () => {
-  return await ollama.listModels();
+  // Get both Ollama models and external models
+  const ollamaModels = await ollama.listModels();
+  const externalModels = externalModelManager.getEnabledModels();
+  
+  // Format external models for the UI
+  const externalModelNames = externalModels.map(model => 
+    `${model.provider}:${model.name} (${model.model})`
+  );
+  
+  return [...ollamaModels, ...externalModelNames];
 });
 
 ipcMain.handle('chat:send', async (_e, req: ChatRequest) => {
@@ -93,6 +104,51 @@ ipcMain.handle('chat:send', async (_e, req: ChatRequest) => {
   console.log('🔄 Main: Received chat request from renderer');
   console.log('📝 Main: Request model:', req.model);
   console.log('📝 Main: Request messages count:', req.messages.length);
+  
+  // Check if this is an external model
+  if (req.model.includes(':')) {
+    try {
+      // Parse external model format: "provider:name (actual_model)"
+      const match = req.model.match(/^([^:]+):(.+?) \(([^)]+)\)$/);
+      if (match) {
+        const [, provider, name, actualModel] = match;
+        
+        // Find the external model
+        const externalModels = externalModelManager.getEnabledModels();
+        const externalModel = externalModels.find(m => 
+          m.provider === provider && m.name === name && m.model === actualModel
+        );
+        
+        if (externalModel) {
+          console.log('🌐 Main: Using external model:', externalModel.name);
+          
+          // Convert messages to the right format
+          const formattedMessages = req.messages.map(msg => ({
+            role: msg.role,
+            content: msg.content
+          }));
+          
+          const result = await externalModelManager.generateChatCompletion(
+            externalModel.id,
+            formattedMessages,
+            {
+              temperature: externalModel.temperature,
+              maxTokens: externalModel.maxTokens
+            }
+          );
+          
+          console.log('📤 Main: External model result length:', result.length);
+          return result;
+        }
+      }
+      
+      // If parsing failed, fall back to error
+      throw new Error('Invalid external model format');
+    } catch (error) {
+      console.error('❌ Main: Error with external model:', error);
+      return `❌ Error with external model: ${error instanceof Error ? error.message : 'Unknown error'}`;
+    }
+  }
   
   // Obtener herramientas filtradas por modelo y configuración
   const allTools = mcpManager.getAllToolsPrioritized();
@@ -279,5 +335,66 @@ ipcMain.handle('tools:get-enabled-for-model', async (_e, modelName: string) => {
   } catch (error) {
     console.error('Error getting enabled tools for model:', error);
     return { success: false, tools: [] };
+  }
+});
+
+// External Models Handlers
+ipcMain.handle('external-models:get-all', async () => {
+  try {
+    const models = externalModelManager.getModels();
+    return { success: true, models };
+  } catch (error) {
+    console.error('Error getting external models:', error);
+    return { success: false, models: [] };
+  }
+});
+
+ipcMain.handle('external-models:add', async (_e, model: any) => {
+  try {
+    const newModel = externalModelManager.addModel(model);
+    return { success: true, model: newModel };
+  } catch (error) {
+    console.error('Error adding external model:', error);
+    return { success: false };
+  }
+});
+
+ipcMain.handle('external-models:update', async (_e, id: string, updates: any) => {
+  try {
+    const success = externalModelManager.updateModel(id, updates);
+    return { success };
+  } catch (error) {
+    console.error('Error updating external model:', error);
+    return { success: false };
+  }
+});
+
+ipcMain.handle('external-models:remove', async (_e, id: string) => {
+  try {
+    const success = externalModelManager.removeModel(id);
+    return { success };
+  } catch (error) {
+    console.error('Error removing external model:', error);
+    return { success: false };
+  }
+});
+
+ipcMain.handle('external-models:toggle', async (_e, id: string, enabled: boolean) => {
+  try {
+    const success = externalModelManager.enableModel(id, enabled);
+    return { success };
+  } catch (error) {
+    console.error('Error toggling external model:', error);
+    return { success: false };
+  }
+});
+
+ipcMain.handle('external-models:validate-key', async (_e, provider: string, apiKey: string, endpoint?: string) => {
+  try {
+    const isValid = await externalModelManager.validateApiKey(provider, apiKey, endpoint);
+    return { success: true, valid: isValid };
+  } catch (error) {
+    console.error('Error validating API key:', error);
+    return { success: false, valid: false };
   }
 });

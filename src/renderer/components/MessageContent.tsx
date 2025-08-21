@@ -1,14 +1,25 @@
 import React from 'react';
 import CodeBlock from './CodeBlock';
+import JsonRenderer from './JsonRenderer';
 
 interface MessageContentProps {
   content: string;
 }
 
 const MessageContent: React.FC<MessageContentProps> = ({ content }) => {
+  // Función para detectar y validar JSON
+  const isValidJSON = (text: string): boolean => {
+    try {
+      const parsed = JSON.parse(text);
+      return typeof parsed === 'object' && parsed !== null;
+    } catch {
+      return false;
+    }
+  };
+
   // Función para procesar el contenido y detectar bloques de código
   const processContent = (text: string) => {
-    const parts: (string | { type: 'code'; code: string; language?: string })[] = [];
+    const parts: (string | { type: 'code'; code: string; language?: string } | { type: 'json'; data: any })[] = [];
     
     // Regex para detectar bloques de código con ```
     const codeBlockRegex = /```(\w+)?\n?([\s\S]*?)```/g;
@@ -27,11 +38,30 @@ const MessageContent: React.FC<MessageContentProps> = ({ content }) => {
       // Agregar el bloque de código
       const language = match[1] || '';
       const code = match[2].trim();
-      parts.push({
-        type: 'code',
-        code,
-        language
-      });
+      
+      // Verificar si es JSON y renderizarlo especialmente
+      if (language === 'json' || (language === '' && isValidJSON(code))) {
+        try {
+          const jsonData = JSON.parse(code);
+          parts.push({
+            type: 'json',
+            data: jsonData
+          });
+        } catch {
+          // Si falla el parsing, tratarlo como código normal
+          parts.push({
+            type: 'code',
+            code,
+            language: 'json'
+          });
+        }
+      } else {
+        parts.push({
+          type: 'code',
+          code,
+          language
+        });
+      }
 
       lastIndex = match.index + match[0].length;
     }
@@ -44,9 +74,22 @@ const MessageContent: React.FC<MessageContentProps> = ({ content }) => {
       }
     }
 
-    // Si no se encontraron bloques de código, devolver el texto original
+    // Si no se encontraron bloques de código, verificar si todo el contenido es JSON
     if (parts.length === 0) {
-      parts.push(text);
+      const trimmedText = text.trim();
+      if (isValidJSON(trimmedText)) {
+        try {
+          const jsonData = JSON.parse(trimmedText);
+          parts.push({
+            type: 'json',
+            data: jsonData
+          });
+        } catch {
+          parts.push(text);
+        }
+      } else {
+        parts.push(text);
+      }
     }
 
     return parts;
@@ -83,6 +126,13 @@ const MessageContent: React.FC<MessageContentProps> = ({ content }) => {
                 __html: processPlainText(part)
               }}
             />
+          );
+        } else if (part.type === 'json') {
+          return (
+            <div key={index} className="json-content-wrapper">
+              <div className="json-label">📋 JSON Response</div>
+              <JsonRenderer data={part.data} />
+            </div>
           );
         } else {
           return (

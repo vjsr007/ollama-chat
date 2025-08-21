@@ -27,14 +27,25 @@ export const electronApi = {
   getEnabledToolsForModel: (modelName: string) => ipcRenderer.invoke('tools:get-enabled-for-model', modelName)
 };
 
+export const externalModelsApi = {
+  getAll: () => ipcRenderer.invoke('external-models:get-all'),
+  add: (model: any) => ipcRenderer.invoke('external-models:add', model),
+  update: (id: string, updates: any) => ipcRenderer.invoke('external-models:update', id, updates),
+  remove: (id: string) => ipcRenderer.invoke('external-models:remove', id),
+  toggle: (id: string, enabled: boolean) => ipcRenderer.invoke('external-models:toggle', id, enabled),
+  validateKey: (provider: string, apiKey: string, endpoint?: string) => ipcRenderer.invoke('external-models:validate-key', provider, apiKey, endpoint)
+};
+
 contextBridge.exposeInMainWorld('ollama', api);
 contextBridge.exposeInMainWorld('mcp', mcpApi);
 contextBridge.exposeInMainWorld('electronAPI', electronApi);
+contextBridge.exposeInMainWorld('externalModels', externalModelsApi);
 
 declare global {
   interface Window {
     ollama: typeof api;
     mcp: typeof mcpApi;
     electronAPI: typeof electronApi;
+    externalModels: typeof externalModelsApi;
   }
 }

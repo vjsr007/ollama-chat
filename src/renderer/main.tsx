@@ -17,6 +17,7 @@ const App: React.FC = () => {
   const [systemPrompt, setSystemPrompt] = useState('You are a helpful assistant.');
   const [activeTab, setActiveTab] = useState<'chat' | 'tools'>('chat');
   const [isToolManagerOpen, setIsToolManagerOpen] = useState(false);
+  const [toolsStatus, setToolsStatus] = useState<{ enabled: number; total: number; limit: number } | null>(null);
   const chatRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -28,6 +29,38 @@ const App: React.FC = () => {
   useEffect(() => {
     window.ollama.listModels().then(ms => { setModels(ms); if (ms[0]) setModel(ms[0]); });
   }, []);
+
+  // Cargar estado de herramientas cuando cambie el modelo
+  useEffect(() => {
+    if (model) {
+      loadToolsStatus();
+    }
+  }, [model]);
+
+  const loadToolsStatus = async () => {
+    try {
+      // Obtener todas las herramientas disponibles
+      const toolsResponse = await (window as any).electronAPI?.getAvailableTools();
+      if (toolsResponse && toolsResponse.success) {
+        const allTools = toolsResponse.tools;
+        const enabledTools = allTools.filter((tool: any) => tool.enabled);
+        
+        // Obtener límites del modelo
+        const limitsResponse = await (window as any).electronAPI?.getModelLimits();
+        const modelLimit = limitsResponse?.success 
+          ? (limitsResponse.limits[model] || limitsResponse.limits['default'] || 25)
+          : 25;
+
+        setToolsStatus({
+          enabled: enabledTools.length,
+          total: allTools.length,
+          limit: modelLimit
+        });
+      }
+    } catch (error) {
+      console.error('Error loading tools status:', error);
+    }
+  };
 
   const send = async () => {
     if (!input.trim() || !model) return;
@@ -134,6 +167,17 @@ const App: React.FC = () => {
         <select id="modelSelect" value={model} onChange={e => setModel(e.target.value)} aria-label="Select model">
           {models.map(m => <option key={m} value={m}>{m}</option>)}
         </select>
+        
+        {/* Indicador de estado de herramientas */}
+        {toolsStatus && (
+          <div className="tools-status" title={`${toolsStatus.enabled} herramientas habilitadas de ${toolsStatus.total} disponibles (límite: ${toolsStatus.limit})`}>
+            🛠️ {toolsStatus.enabled}/{toolsStatus.total}
+            {toolsStatus.enabled > toolsStatus.limit && (
+              <span className="warning-indicator" title="Excede el límite del modelo">⚠️</span>
+            )}
+          </div>
+        )}
+        
         <button onClick={pickImage} aria-label="Attach image">📷 Image</button>
         {imagePath && (
           <span className="image-chip">{imagePath.split(/\\|\//).pop()} <button onClick={() => setImagePath(undefined)} aria-label="Remove image">✕</button></span>
@@ -188,7 +232,10 @@ const App: React.FC = () => {
       
       <ToolManager 
         isOpen={isToolManagerOpen}
-        onClose={() => setIsToolManagerOpen(false)}
+        onClose={() => {
+          setIsToolManagerOpen(false);
+          loadToolsStatus(); // Recargar estado después de cerrar
+        }}
         currentModel={model}
       />
     </div>

@@ -21,6 +21,9 @@ declare global {
     electronAPI: {
       getAvailableTools: () => Promise<{ success: boolean; tools: Tool[] }>;
       updateToolStatus: (toolName: string, enabled: boolean) => Promise<void>;
+      getModelLimits: () => Promise<{ success: boolean; limits: { [key: string]: number } }>;
+      setModelLimit: (modelName: string, limit: number) => Promise<{ success: boolean }>;
+      getEnabledToolsForModel: (modelName: string) => Promise<{ success: boolean; tools: string[] }>;
     };
   }
 }
@@ -47,8 +50,12 @@ const ToolManager: React.FC<ToolManagerProps> = ({ isOpen, onClose, currentModel
     if (isOpen) {
       loadTools();
       loadModelLimits();
+      // Recargar los límites cada vez que cambie el modelo
+      if (currentModel) {
+        loadCurrentModelLimit();
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, currentModel]);
 
   useEffect(() => {
     filterTools();
@@ -65,21 +72,52 @@ const ToolManager: React.FC<ToolManagerProps> = ({ isOpen, onClose, currentModel
     }
   };
 
-  const loadModelLimits = () => {
-    const savedLimits = localStorage.getItem('modelToolLimits');
-    if (savedLimits) {
-      const limits = JSON.parse(savedLimits);
-      setModelLimits(limits);
-      setCurrentLimit(limits[currentModel] || defaultLimits[currentModel] || defaultLimits.default);
-    } else {
-      setModelLimits(defaultLimits);
-      setCurrentLimit(defaultLimits[currentModel] || defaultLimits.default);
+  const loadModelLimits = async () => {
+    try {
+      const response = await window.electronAPI.getModelLimits();
+      if (response.success) {
+        const limits = response.limits;
+        setModelLimits(limits);
+        setCurrentLimit(limits[currentModel] || limits['default'] || 25);
+      }
+    } catch (error) {
+      console.error('Error loading model limits:', error);
+      // Fallback to local storage
+      const savedLimits = localStorage.getItem('modelToolLimits');
+      if (savedLimits) {
+        const limits = JSON.parse(savedLimits);
+        setModelLimits(limits);
+        setCurrentLimit(limits[currentModel] || defaultLimits[currentModel] || defaultLimits.default);
+      } else {
+        setModelLimits(defaultLimits);
+        setCurrentLimit(defaultLimits[currentModel] || defaultLimits.default);
+      }
     }
   };
 
-  const saveModelLimits = (limits: { [key: string]: number }) => {
-    localStorage.setItem('modelToolLimits', JSON.stringify(limits));
-    setModelLimits(limits);
+  const loadCurrentModelLimit = async () => {
+    try {
+      const response = await window.electronAPI.getModelLimits();
+      if (response.success) {
+        const limits = response.limits;
+        setCurrentLimit(limits[currentModel] || limits['default'] || 25);
+      }
+    } catch (error) {
+      console.error('Error loading current model limit:', error);
+    }
+  };
+
+  const saveModelLimits = async (limits: { [key: string]: number }) => {
+    // Guardar en backend
+    try {
+      await window.electronAPI.setModelLimit(currentModel, limits[currentModel]);
+      setModelLimits(limits);
+    } catch (error) {
+      console.error('Error saving model limits to backend:', error);
+      // Fallback to localStorage
+      localStorage.setItem('modelToolLimits', JSON.stringify(limits));
+      setModelLimits(limits);
+    }
   };
 
   const filterTools = () => {
@@ -120,30 +158,49 @@ const ToolManager: React.FC<ToolManagerProps> = ({ isOpen, onClose, currentModel
     setCurrentLimit(newLimit);
   };
 
-  const enableAllTools = () => {
+  const enableAllTools = async () => {
     const updatedTools = tools.map(tool => ({ ...tool, enabled: true }));
     setTools(updatedTools);
-    updatedTools.forEach(tool => {
-      window.electronAPI.updateToolStatus(tool.name, true);
-    });
+    
+    // Guardar cada cambio en el backend
+    try {
+      await Promise.all(
+        updatedTools.map(tool => window.electronAPI.updateToolStatus(tool.name, true))
+      );
+    } catch (error) {
+      console.error('Error enabling all tools:', error);
+    }
   };
 
-  const disableAllTools = () => {
+  const disableAllTools = async () => {
     const updatedTools = tools.map(tool => ({ ...tool, enabled: false }));
     setTools(updatedTools);
-    updatedTools.forEach(tool => {
-      window.electronAPI.updateToolStatus(tool.name, false);
-    });
+    
+    // Guardar cada cambio en el backend
+    try {
+      await Promise.all(
+        updatedTools.map(tool => window.electronAPI.updateToolStatus(tool.name, false))
+      );
+    } catch (error) {
+      console.error('Error disabling all tools:', error);
+    }
   };
 
-  const enableByCategory = (category: string) => {
+  const enableByCategory = async (category: string) => {
     const updatedTools = tools.map(tool => 
       tool.category === category ? { ...tool, enabled: true } : tool
     );
     setTools(updatedTools);
-    updatedTools.filter(t => t.category === category).forEach(tool => {
-      window.electronAPI.updateToolStatus(tool.name, true);
-    });
+    
+    // Guardar cambios en el backend solo para herramientas de la categoría
+    try {
+      const categoryTools = updatedTools.filter(t => t.category === category);
+      await Promise.all(
+        categoryTools.map(tool => window.electronAPI.updateToolStatus(tool.name, true))
+      );
+    } catch (error) {
+      console.error('Error enabling category tools:', error);
+    }
   };
 
   const getCategories = () => {

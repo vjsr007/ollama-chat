@@ -86,6 +86,33 @@ textarea::placeholder { color:#667386; }
   color: white;
 }
 
+/* Indicador de estado de herramientas */
+.tools-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: rgba(45, 55, 72, 0.8);
+  border: 1px solid rgba(74, 85, 104, 0.6);
+  border-radius: 4px;
+  font-size: 12px;
+  color: #e2e8f0;
+  white-space: nowrap;
+  font-family: 'Consolas', 'Monaco', monospace;
+}
+
+.warning-indicator {
+  color: #ed8936;
+  animation: pulse 2s infinite;
+  margin-left: 2px;
+}
+
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+
 /* Contenedor de herramientas */
 .tools-container {
   flex: 1;

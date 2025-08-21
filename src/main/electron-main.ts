@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import path from 'path';
 // MCP Manager
 import { McpManager } from '../shared/infrastructure/mcp/McpManager';
+import ToolConfigManager from './tool-config';
 // Dynamic resolution of OllamaClient considering different build structures
 let OllamaClientMod: any;
 const candidatePaths = [
@@ -30,6 +31,7 @@ import type { McpToolCall, McpServer } from '../shared/domain/mcp';
 let mainWindow: BrowserWindow | null = null;
 const ollama = new OllamaClient();
 const mcpManager = new McpManager(process.cwd());
+const toolConfigManager = new ToolConfigManager();
 
 async function createWindow() {
   mainWindow = new BrowserWindow({
@@ -65,6 +67,10 @@ app.whenReady().then(async () => {
     console.log('🔍 Project root calculated:', projectRoot);
     await mcpManager.loadDefaultConfiguration(projectRoot);
     console.log('🔧 MCP Manager initialized');
+    
+    // Inicializar configuración de herramientas
+    await toolConfigManager.loadConfig();
+    console.log('⚙️ Tool Configuration Manager initialized');
   } catch (error) {
     console.error('⚠️ Error inicializando MCP Manager:', error);
   }
@@ -88,11 +94,16 @@ ipcMain.handle('chat:send', async (_e, req: ChatRequest) => {
   console.log('📝 Main: Request model:', req.model);
   console.log('📝 Main: Request messages count:', req.messages.length);
   
-  const tools = mcpManager.getAllToolsPrioritized();
-  console.log('🛠️ Main: Retrieved tools count:', tools.length);
-  console.log('🔧 Main: Terminal tools prioritized');
+  // Obtener herramientas filtradas por modelo y configuración
+  const allTools = mcpManager.getAllToolsPrioritized();
+  const enabledToolNames = toolConfigManager.getEnabledToolsForModel(req.model, allTools.map(t => t.name));
+  const filteredTools = allTools.filter(tool => enabledToolNames.includes(tool.name));
   
-  const result = await ollama.generate(req, tools);
+  console.log('🛠️ Main: All available tools:', allTools.length);
+  console.log('✅ Main: Enabled tools for model:', filteredTools.length);
+  console.log('🔧 Main: Terminal tools prioritized and filtered by model configuration');
+  
+  const result = await ollama.generate(req, filteredTools);
   console.log('📤 Main: Generated result:', result);
   
   // Check if the model wants to use tools
@@ -129,7 +140,7 @@ ipcMain.handle('chat:send', async (_e, req: ChatRequest) => {
       ];
       
       console.log('🔄 Main: Sending follow-up request with tool results');
-      const finalResult = await ollama.generate({ ...req, messages: updatedMessages }, tools);
+      const finalResult = await ollama.generate({ ...req, messages: updatedMessages }, filteredTools);
       console.log('📤 Main: Final result after tool execution:', finalResult.content);
       
       return finalResult.content;
@@ -218,7 +229,7 @@ ipcMain.handle('tools:get-available', async () => {
         description: tool.description || 'No description available',
         server: serverInfo,
         category: category,
-        enabled: true // Default to enabled, could be stored in config later
+        enabled: toolConfigManager.isToolEnabled(tool.name) // Usar estado real de configuración
       };
     });
     
@@ -231,15 +242,42 @@ ipcMain.handle('tools:get-available', async () => {
 
 ipcMain.handle('tools:update-status', async (_e, toolName: string, enabled: boolean) => {
   try {
-    // This could be expanded to actually manage tool status in the MCP manager
-    // For now, we'll just log the change
-    console.log(`Tool ${toolName} ${enabled ? 'enabled' : 'disabled'}`);
-    
-    // TODO: Implement actual tool enable/disable logic in McpManager
-    // This would require storing tool preferences and filtering tools accordingly
+    await toolConfigManager.setToolEnabled(toolName, enabled);
+    console.log(`🔧 Tool ${toolName} ${enabled ? 'enabled' : 'disabled'}`);
     return { success: true };
   } catch (error) {
     console.error('Error updating tool status:', error);
     return { success: false };
+  }
+});
+
+// Handlers adicionales para gestión de modelos
+ipcMain.handle('tools:get-model-limits', async () => {
+  try {
+    return { success: true, limits: toolConfigManager.getModelLimits() };
+  } catch (error) {
+    console.error('Error getting model limits:', error);
+    return { success: false, limits: {} };
+  }
+});
+
+ipcMain.handle('tools:set-model-limit', async (_e, modelName: string, limit: number) => {
+  try {
+    await toolConfigManager.setModelLimit(modelName, limit);
+    return { success: true };
+  } catch (error) {
+    console.error('Error setting model limit:', error);
+    return { success: false };
+  }
+});
+
+ipcMain.handle('tools:get-enabled-for-model', async (_e, modelName: string) => {
+  try {
+    const allTools = mcpManager.getAllTools().map(tool => tool.name);
+    const enabledTools = toolConfigManager.getEnabledToolsForModel(modelName, allTools);
+    return { success: true, tools: enabledTools };
+  } catch (error) {
+    console.error('Error getting enabled tools for model:', error);
+    return { success: false, tools: [] };
   }
 });

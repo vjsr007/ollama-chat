@@ -21,7 +21,10 @@ export const mcpApi = {
 
 export const electronApi = {
   getAvailableTools: () => ipcRenderer.invoke('tools:get-available'),
-  updateToolStatus: (toolName: string, enabled: boolean) => ipcRenderer.invoke('tools:update-status', toolName, enabled)
+  updateToolStatus: (toolName: string, enabled: boolean) => ipcRenderer.invoke('tools:update-status', toolName, enabled),
+  getModelLimits: () => ipcRenderer.invoke('tools:get-model-limits'),
+  setModelLimit: (modelName: string, limit: number) => ipcRenderer.invoke('tools:set-model-limit', modelName, limit),
+  getEnabledToolsForModel: (modelName: string) => ipcRenderer.invoke('tools:get-enabled-for-model', modelName)
 };
 
 contextBridge.exposeInMainWorld('ollama', api);

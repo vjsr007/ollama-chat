@@ -30,32 +30,32 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
     maxTokens: 4096
   });
 
-  // Modelos predefinidos populares
+  // Popular predefined models
   const predefinedModels = {
     'openai': [
-      { model: 'gpt-4o', name: 'GPT-4o', description: 'Modelo más avanzado de OpenAI' },
-      { model: 'gpt-4o-mini', name: 'GPT-4o Mini', description: 'Versión optimizada de GPT-4o' },
-      { model: 'gpt-4-turbo', name: 'GPT-4 Turbo', description: 'GPT-4 con mayor ventana de contexto' },
-      { model: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', description: 'Modelo rápido y eficiente' }
+      { model: 'gpt-4o', name: 'GPT-4o', description: 'OpenAI\'s most advanced model' },
+      { model: 'gpt-4o-mini', name: 'GPT-4o Mini', description: 'Optimized version of GPT-4o' },
+      { model: 'gpt-4-turbo', name: 'GPT-4 Turbo', description: 'GPT-4 with larger context window' },
+      { model: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', description: 'Fast and efficient model' }
     ],
     'anthropic': [
-      { model: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet', description: 'Modelo más potente de Anthropic' },
-      { model: 'claude-3-opus-20240229', name: 'Claude 3 Opus', description: 'Modelo premium de Anthropic' },
-      { model: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku', description: 'Modelo rápido y económico' }
+      { model: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet', description: 'Anthropic\'s most powerful model' },
+      { model: 'claude-3-opus-20240229', name: 'Claude 3 Opus', description: 'Anthropic\'s premium model' },
+      { model: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku', description: 'Fast and economical model' }
     ],
     'github-copilot': [
-      { model: 'gpt-4o', name: 'GitHub Copilot GPT-4o', description: 'GPT-4o vía GitHub Copilot' },
-      { model: 'gpt-4o-mini', name: 'GitHub Copilot GPT-4o Mini', description: 'GPT-4o Mini vía GitHub Copilot' },
-      { model: 'claude-3.5-sonnet', name: 'GitHub Copilot Claude 3.5', description: 'Claude 3.5 vía GitHub Copilot' },
-      { model: 'o1-preview', name: 'GitHub Copilot o1-preview', description: 'Modelo o1-preview vía GitHub Copilot' }
+      { model: 'gpt-4o', name: 'GitHub Copilot GPT-4o', description: 'GPT-4o via GitHub Copilot' },
+      { model: 'gpt-4o-mini', name: 'GitHub Copilot GPT-4o Mini', description: 'GPT-4o Mini via GitHub Copilot' },
+      { model: 'claude-3.5-sonnet', name: 'GitHub Copilot Claude 3.5', description: 'Claude 3.5 via GitHub Copilot' },
+      { model: 'o1-preview', name: 'GitHub Copilot o1-preview', description: 'o1-preview model via GitHub Copilot' }
     ],
     'google': [
-      { model: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', description: 'Modelo avanzado de Google' },
-      { model: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', description: 'Modelo rápido de Google' }
+      { model: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', description: 'Google\'s advanced model' },
+      { model: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', description: 'Google\'s fast model' }
     ],
     'cohere': [
-      { model: 'command-r-plus', name: 'Command R+', description: 'Modelo premium de Cohere' },
-      { model: 'command-r', name: 'Command R', description: 'Modelo estándar de Cohere' }
+      { model: 'command-r-plus', name: 'Command R+', description: 'Cohere\'s premium model' },
+      { model: 'command-r', name: 'Command R', description: 'Cohere\'s standard model' }
     ]
   };
 
@@ -67,7 +67,7 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
 
   const loadExternalModels = async () => {
     try {
-      // Cargar modelos externos desde el backend
+      // Load external models from backend
       const response = await (window as any).externalModels?.getAll();
       if (response && response.success) {
         setExternalModels(response.models);
@@ -78,13 +78,13 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
   };
 
   const saveExternalModels = (models: ExternalModel[]) => {
-    // Los modelos se guardan automáticamente en el backend
+    // Models are automatically saved in the backend
     setExternalModels(models);
   };
 
   const addModel = async () => {
     if (!newModel.name || !newModel.model || !newModel.provider) {
-      alert('Por favor completa todos los campos obligatorios');
+      alert('Please complete all required fields');
       return;
     }
 
@@ -103,7 +103,7 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
 
       const response = await (window as any).externalModels?.add(modelToAdd);
       if (response && response.success) {
-        await loadExternalModels(); // Recargar la lista
+        await loadExternalModels(); // Reload the list
         
         setNewModel({
           provider: 'openai',
@@ -113,11 +113,11 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
         });
         setShowAddModel(false);
       } else {
-        alert('Error agregando el modelo');
+        alert('Error adding model');
       }
     } catch (error) {
       console.error('Error adding model:', error);
-      alert('Error agregando el modelo');
+      alert('Error adding model');
     }
   };
 
@@ -125,13 +125,13 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
     try {
       const response = await (window as any).externalModels?.remove(id);
       if (response && response.success) {
-        await loadExternalModels(); // Recargar la lista
+        await loadExternalModels(); // Reload the list
       } else {
-        alert('Error eliminando el modelo');
+        alert('Error removing model');
       }
     } catch (error) {
       console.error('Error removing model:', error);
-      alert('Error eliminando el modelo');
+      alert('Error removing model');
     }
   };
 
@@ -142,13 +142,13 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
       
       const response = await (window as any).externalModels?.toggle(id, !model.enabled);
       if (response && response.success) {
-        await loadExternalModels(); // Recargar la lista
+        await loadExternalModels(); // Reload the list
       } else {
-        alert('Error cambiando estado del modelo');
+        alert('Error changing model status');
       }
     } catch (error) {
       console.error('Error toggling model:', error);
-      alert('Error cambiando estado del modelo');
+      alert('Error changing model status');
     }
   };
 
@@ -170,7 +170,7 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
 
   const saveEditedModel = async () => {
     if (!editingModel || !newModel.name || !newModel.model || !newModel.provider) {
-      alert('Por favor completa todos los campos obligatorios');
+      alert('Please complete all required fields');
       return;
     }
 
@@ -189,7 +189,7 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
 
       const response = await (window as any).externalModels?.update(editingModel.id, modelToUpdate);
       if (response && response.success) {
-        await loadExternalModels(); // Recargar la lista
+        await loadExternalModels(); // Reload the list
         
         setNewModel({
           provider: 'openai',
@@ -200,11 +200,11 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
         setShowAddModel(false);
         setEditingModel(null);
       } else {
-        alert('Error actualizando el modelo');
+        alert('Error updating model');
       }
     } catch (error) {
       console.error('Error updating model:', error);
-      alert('Error actualizando el modelo');
+      alert('Error updating model');
     }
   };
 
@@ -255,13 +255,13 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
 
       const response = await (window as any).externalModels?.add(modelToAdd);
       if (response && response.success) {
-        await loadExternalModels(); // Recargar la lista
+        await loadExternalModels(); // Reload the list
       } else {
-        alert('Error agregando el modelo predefinido');
+        alert('Error adding predefined model');
       }
     } catch (error) {
       console.error('Error adding predefined model:', error);
-      alert('Error agregando el modelo predefinido');
+      alert('Error adding predefined model');
     }
   };
 
@@ -271,27 +271,27 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
     <div className="model-manager-overlay">
       <div className="model-manager">
         <div className="model-manager-header">
-          <h2>🌐 Gestión de Modelos Externos</h2>
+          <h2>🌐 External Model Management</h2>
           <button className="close-button" onClick={onClose}>✕</button>
         </div>
 
         <div className="model-manager-content">
-          {/* Modelos configurados */}
+          {/* Configured models */}
           <div className="models-section">
             <div className="section-header">
-              <h3>📋 Modelos Configurados</h3>
+              <h3>📋 Configured Models</h3>
               <button 
                 onClick={() => setShowAddModel(true)}
                 className="add-model-btn"
               >
-                ➕ Agregar Modelo
+                ➕ Add Model
               </button>
             </div>
 
             {externalModels.length === 0 ? (
               <div className="no-models">
-                <p>No hay modelos externos configurados</p>
-                <p className="hint">Agrega modelos de OpenAI, Anthropic, GitHub Copilot y más</p>
+                <p>No external models configured</p>
+                <p className="hint">Add models from OpenAI, Anthropic, GitHub Copilot and more</p>
               </div>
             ) : (
               <div className="models-list">
@@ -314,7 +314,7 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
                         )}
                       </div>
                       {model.apiKey && (
-                        <div className="model-key">🔑 API Key configurada</div>
+                        <div className="model-key">🔑 API Key configured</div>
                       )}
                     </div>
                     
@@ -322,21 +322,21 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
                       <button
                         onClick={() => toggleModel(model.id)}
                         className={`toggle-btn ${model.enabled ? 'enabled' : 'disabled'}`}
-                        title={model.enabled ? 'Deshabilitar' : 'Habilitar'}
+                        title={model.enabled ? 'Disable' : 'Enable'}
                       >
                         {model.enabled ? '👁️' : '🚫'}
                       </button>
                       <button
                         onClick={() => startEditModel(model)}
                         className="edit-btn"
-                        title="Editar modelo"
+                        title="Edit model"
                       >
                         ✏️
                       </button>
                       <button
                         onClick={() => removeModel(model.id)}
                         className="remove-btn"
-                        title="Eliminar modelo"
+                        title="Remove model"
                       >
                         🗑️
                       </button>
@@ -347,9 +347,9 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
             )}
           </div>
 
-          {/* Modelos predefinidos */}
+          {/* Predefined models */}
           <div className="predefined-section">
-            <h3>⭐ Modelos Populares</h3>
+            <h3>⭐ Popular Models</h3>
             <div className="predefined-providers">
               {Object.entries(predefinedModels).map(([provider, models]) => (
                 <div key={provider} className="provider-section">
@@ -367,7 +367,7 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
                         <button
                           onClick={() => addPredefinedModel(provider, modelInfo)}
                           className="add-predefined-btn"
-                          title="Agregar este modelo"
+                          title="Add this model"
                         >
                           ➕
                         </button>
@@ -379,18 +379,18 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
             </div>
           </div>
 
-          {/* Formulario para agregar/editar modelo */}
+          {/* Form to add/edit model */}
           {showAddModel && (
             <div className="add-model-form">
-              <h3>{editingModel ? '✏️ Editar Modelo' : '➕ Agregar Nuevo Modelo'}</h3>
+              <h3>{editingModel ? '✏️ Edit Model' : '➕ Add New Model'}</h3>
               
               <div className="form-row">
                 <div className="form-group">
-                  <label>Proveedor</label>
+                  <label>Provider</label>
                   <select
                     value={newModel.provider}
                     onChange={(e) => setNewModel(prev => ({ ...prev, provider: e.target.value as any }))}
-                    title="Seleccionar proveedor del modelo"
+                    title="Select model provider"
                   >
                     <option value="openai">OpenAI</option>
                     <option value="anthropic">Anthropic</option>
@@ -401,51 +401,51 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
                 </div>
                 
                 <div className="form-group">
-                  <label>Nombre del modelo</label>
+                  <label>Model name</label>
                   <input
                     type="text"
                     value={newModel.name || ''}
                     onChange={(e) => setNewModel(prev => ({ ...prev, name: e.target.value }))}
-                    placeholder="Ej: GPT-4o"
+                    placeholder="e.g. GPT-4o"
                   />
                 </div>
               </div>
 
               <div className="form-row">
                 <div className="form-group">
-                  <label>ID del modelo</label>
+                  <label>Model ID</label>
                   <input
                     type="text"
                     value={newModel.model || ''}
                     onChange={(e) => setNewModel(prev => ({ ...prev, model: e.target.value }))}
-                    placeholder="Ej: gpt-4o"
+                    placeholder="e.g. gpt-4o"
                   />
                 </div>
                 
                 <div className="form-group">
-                  <label>API Key (opcional)</label>
+                  <label>API Key (optional)</label>
                   <input
                     type="password"
                     value={newModel.apiKey || ''}
                     onChange={(e) => setNewModel(prev => ({ ...prev, apiKey: e.target.value }))}
-                    placeholder="Tu API key"
+                    placeholder="Your API key"
                   />
                 </div>
               </div>
 
               <div className="form-group">
-                <label>Descripción (opcional)</label>
+                <label>Description (optional)</label>
                 <input
                   type="text"
                   value={newModel.description || ''}
                   onChange={(e) => setNewModel(prev => ({ ...prev, description: e.target.value }))}
-                  placeholder="Descripción del modelo"
+                  placeholder="Model description"
                 />
               </div>
 
               <div className="form-row">
                 <div className="form-group">
-                  <label>Temperatura</label>
+                  <label>Temperature</label>
                   <input
                     type="number"
                     min="0"
@@ -453,7 +453,7 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
                     step="0.1"
                     value={newModel.temperature || 0.7}
                     onChange={(e) => setNewModel(prev => ({ ...prev, temperature: parseFloat(e.target.value) }))}
-                    title="Configurar temperatura del modelo"
+                    title="Configure model temperature"
                     placeholder="0.7"
                   />
                 </div>
@@ -466,7 +466,7 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
                     max="128000"
                     value={newModel.maxTokens || 4096}
                     onChange={(e) => setNewModel(prev => ({ ...prev, maxTokens: parseInt(e.target.value) }))}
-                    title="Configurar tokens máximos"
+                    title="Configure maximum tokens"
                     placeholder="4096"
                   />
                 </div>
@@ -477,10 +477,10 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
                   onClick={editingModel ? saveEditedModel : addModel} 
                   className="save-btn"
                 >
-                  {editingModel ? '💾 Actualizar Modelo' : '💾 Guardar Modelo'}
+                  {editingModel ? '💾 Update Model' : '💾 Save Model'}
                 </button>
                 <button onClick={editingModel ? cancelEdit : () => setShowAddModel(false)} className="cancel-btn">
-                  ❌ Cancelar
+                  ❌ Cancel
                 </button>
               </div>
             </div>
@@ -489,10 +489,10 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
 
         <div className="model-manager-footer">
           <div className="footer-info">
-            <span>💡 Los modelos externos requieren API keys válidas para funcionar</span>
+            <span>💡 External models require valid API keys to function</span>
           </div>
           <button onClick={onClose} className="close-footer-btn">
-            Cerrar
+            Close
           </button>
         </div>
       </div>

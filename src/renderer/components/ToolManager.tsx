@@ -229,7 +229,7 @@ const ToolManager: React.FC<ToolManagerProps> = ({ isOpen, onClose, currentModel
     <div className="tool-manager-overlay">
       <div className="tool-manager">
         <div className="tool-manager-header">
-          <h2>🛠️ Gestión de Herramientas</h2>
+          <h2>🛠️ Tool Management</h2>
           <button className="close-button" onClick={onClose}>✕</button>
         </div>
 
@@ -240,16 +240,16 @@ const ToolManager: React.FC<ToolManagerProps> = ({ isOpen, onClose, currentModel
               <h3>📊 Modelo: {currentModel}</h3>
               <div className="tool-count">
                 <span className={`count ${getEnabledToolsCount() > currentLimit ? 'over-limit' : ''}`}>
-                  {getEnabledToolsCount()} / {tools.length} herramientas habilitadas
+                  {getEnabledToolsCount()} / {tools.length} tools enabled
                 </span>
                 {getEnabledToolsCount() > currentLimit && (
-                  <span className="warning">⚠️ Excede el límite de {currentLimit}</span>
+                  <span className="warning">⚠️ Exceeds limit of {currentLimit}</span>
                 )}
               </div>
             </div>
             
             <div className="limit-control">
-              <label htmlFor="limit-input">Límite para este modelo:</label>
+              <label htmlFor="limit-input">Limit for this model:</label>
               <input
                 id="limit-input"
                 type="number"
@@ -258,14 +258,14 @@ const ToolManager: React.FC<ToolManagerProps> = ({ isOpen, onClose, currentModel
                 value={currentLimit}
                 onChange={(e) => handleLimitChange(Number(e.target.value))}
                 className="limit-input"
-                title="Número máximo de herramientas que puede usar este modelo"
+                title="Maximum number of tools this model can use"
               />
             </div>
           </div>
 
-          {/* Estadísticas por categoría */}
+          {/* Category statistics */}
           <div className="category-stats">
-            <h4>📈 Por Categoría:</h4>
+            <h4>📈 By Category:</h4>
             <div className="stats-grid">
               {getCategoryStats().map(stat => (
                 <div key={stat.category} className="stat-item">
@@ -274,7 +274,7 @@ const ToolManager: React.FC<ToolManagerProps> = ({ isOpen, onClose, currentModel
                   <button 
                     className="enable-category-btn"
                     onClick={() => enableByCategory(stat.category)}
-                    title={`Habilitar todas las herramientas de ${stat.category}`}
+                    title={`Enable all tools in ${stat.category}`}
                   >
                     ✓
                   </button>
@@ -283,16 +283,16 @@ const ToolManager: React.FC<ToolManagerProps> = ({ isOpen, onClose, currentModel
             </div>
           </div>
 
-          {/* Controles de búsqueda y filtrado */}
+          {/* Search and filter controls */}
           <div className="controls">
             <div className="search-control">
               <input
                 type="text"
-                placeholder="🔍 Buscar herramientas..."
+                placeholder="🔍 Search tools..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="search-input"
-                title="Buscar herramientas por nombre o descripción"
+                title="Search tools by name or description"
               />
             </div>
 
@@ -301,9 +301,9 @@ const ToolManager: React.FC<ToolManagerProps> = ({ isOpen, onClose, currentModel
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
                 className="category-filter"
-                title="Filtrar herramientas por categoría"
+                title="Filter tools by category"
               >
-                <option value="all">🏷️ Todas las categorías</option>
+                <option value="all">🏷️ All categories</option>
                 {getCategories().map(category => (
                   <option key={category} value={category}>{category}</option>
                 ))}
@@ -312,15 +312,15 @@ const ToolManager: React.FC<ToolManagerProps> = ({ isOpen, onClose, currentModel
 
             <div className="bulk-actions">
               <button onClick={enableAllTools} className="enable-all-btn">
-                ✅ Habilitar Todas
+                ✅ Enable All
               </button>
               <button onClick={disableAllTools} className="disable-all-btn">
-                ❌ Deshabilitar Todas
+                ❌ Disable All
               </button>
             </div>
           </div>
 
-          {/* Lista de herramientas */}
+          {/* Tools list */}
           <div className="tools-list">
             {filteredTools.map((tool, index) => (
               <div key={tool.name} className={`tool-item ${tool.enabled ? 'enabled' : 'disabled'}`}>
@@ -342,7 +342,7 @@ const ToolManager: React.FC<ToolManagerProps> = ({ isOpen, onClose, currentModel
                       type="checkbox"
                       checked={tool.enabled}
                       onChange={() => toggleTool(tool.name)}
-                      title={`${tool.enabled ? 'Deshabilitar' : 'Habilitar'} ${tool.name}`}
+                      title={`${tool.enabled ? 'Disable' : 'Enable'} ${tool.name}`}
                     />
                     <span className="toggle-slider"></span>
                   </label>
@@ -353,17 +353,17 @@ const ToolManager: React.FC<ToolManagerProps> = ({ isOpen, onClose, currentModel
 
           {filteredTools.length === 0 && (
             <div className="no-tools">
-              <p>🔍 No se encontraron herramientas con los filtros actuales</p>
+              <p>🔍 No tools found with current filters</p>
             </div>
           )}
         </div>
 
         <div className="tool-manager-footer">
           <div className="footer-info">
-            <span>💡 Tip: Las herramientas deshabilitadas no estarán disponibles para el modelo</span>
+            <span>💡 Tip: Disabled tools won't be available to the model</span>
           </div>
           <button onClick={onClose} className="close-footer-btn">
-            Cerrar
+            Close
           </button>
         </div>
       </div>

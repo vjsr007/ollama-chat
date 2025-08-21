@@ -98,12 +98,12 @@ class ToolConfigManager {
     return { ...this.config.modelLimits };
   }
 
-  // Obtener herramientas habilitadas para un modelo específico
+  // Get enabled tools for a specific model
   getEnabledToolsForModel(modelName: string, availableTools: string[]): string[] {
     const limit = this.getModelLimit(modelName);
     const enabledTools = availableTools.filter(toolName => this.isToolEnabled(toolName));
     
-    // Si excede el límite, tomar solo las primeras herramientas habilitadas
+    // If it exceeds the limit, take only the first enabled tools
     if (enabledTools.length > limit) {
       console.log(`⚠️ Model ${modelName} has ${enabledTools.length} enabled tools, limiting to ${limit}`);
       return enabledTools.slice(0, limit);
@@ -112,7 +112,7 @@ class ToolConfigManager {
     return enabledTools;
   }
 
-  // Métodos de utilidad para stats
+  // Utility methods for stats
   getToolStats(): { total: number; enabled: number; disabled: number } {
     const tools = Object.values(this.config.tools);
     const enabled = tools.filter(tool => tool.enabled).length;
@@ -125,7 +125,7 @@ class ToolConfigManager {
     };
   }
 
-  // Exportar/Importar configuración
+  // Export/Import configuration
   async exportConfig(): Promise<string> {
     return JSON.stringify(this.config, null, 2);
   }
@@ -142,7 +142,7 @@ class ToolConfigManager {
     }
   }
 
-  // Reset a configuración por defecto
+  // Reset to default configuration
   async resetToDefaults(): Promise<void> {
     this.config = {
       tools: {},

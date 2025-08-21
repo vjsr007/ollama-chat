@@ -416,10 +416,21 @@ ipcMain.handle('tools:get-available', async () => {
   try {
     const tools = mcpManager.getAllTools();
     console.log('✅ Main: Retrieved', tools.length, 'available tools successfully');
-    return tools;
+    
+    // Transform tools to match the expected format for ToolManager
+    const transformedTools = tools.map(tool => ({
+      name: tool.name,
+      description: tool.description || 'No description available',
+      server: tool.origin || 'MCP Server',
+      category: 'MCP Tools',
+      enabled: toolConfigManager.isToolEnabled(tool.name)
+    }));
+    
+    return { success: true, tools: transformedTools };
   } catch (error) {
     console.error('❌ Main: Error fetching available tools:', error);
-    throw error;
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return { success: false, tools: [], error: errorMessage };
   }
 });
 
@@ -440,10 +451,11 @@ ipcMain.handle('tools:get-model-limits', async () => {
   try {
     const limits = toolConfigManager.getModelLimits();
     console.log('✅ Main: Retrieved model limits successfully');
-    return limits;
+    return { success: true, limits };
   } catch (error) {
     console.error('❌ Main: Error fetching model limits:', error);
-    throw error;
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return { success: false, limits: {}, error: errorMessage };
   }
 });
 
@@ -466,10 +478,11 @@ ipcMain.handle('tools:get-enabled-for-model', async (event, modelName) => {
     const toolNames = allTools.map(tool => tool.name);
     const enabledToolNames = toolConfigManager.getEnabledToolsForModel(modelName, toolNames);
     console.log('✅ Main: Retrieved', enabledToolNames.length, 'enabled tools for model');
-    return enabledToolNames;
+    return { success: true, tools: enabledToolNames };
   } catch (error) {
     console.error('❌ Main: Error fetching enabled tools for model:', error);
-    throw error;
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return { success: false, tools: [], error: errorMessage };
   }
 });
 

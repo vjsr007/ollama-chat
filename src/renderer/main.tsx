@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ChatMessage } from '../shared/domain/chat';
 import { McpTools } from './components/McpTools';
+import MessageContent from './components/MessageContent';
 import type { McpToolCall, McpToolResult } from '../shared/domain/mcp';
 import './styles.css';
 
@@ -140,7 +141,9 @@ const App: React.FC = () => {
                 {messages.map((m,i) => (
                   <div key={i} className={`msg ${m.role}`}>
                     <span className="msg-role">{m.role}</span>
-                    <div className="msg-content">{m.content}</div>
+                    <div className="msg-content">
+                      <MessageContent content={m.content} />
+                    </div>
                     {m.imagePath && <div className="attachment">Attached image</div>}
                   </div>
                 ))}

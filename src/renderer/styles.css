@@ -476,3 +476,196 @@ textarea::placeholder { color:#667386; }
 .checkbox-label input[type="checkbox"] {
   width: auto !important;
 }
+
+/* Estilos para bloques de código mejorados */
+.code-block-container {
+  margin: 16px 0;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #0d1117;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.code-block-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.code-language {
+  font-size: 12px;
+  color: #7c8e9a;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.code-copy-btn {
+  background: transparent;
+  border: none;
+  color: #7c8e9a;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.code-copy-btn:hover {
+  color: #58a6ff;
+  background: rgba(88, 166, 255, 0.1);
+}
+
+.code-block {
+  margin: 0;
+  padding: 16px;
+  background: #0d1117;
+  overflow-x: auto;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #e6edf3;
+}
+
+.code-block code {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+/* Resaltado de sintaxis personalizado */
+.code-block .keyword {
+  color: #ff7b72;
+  font-weight: bold;
+}
+
+.code-block .string {
+  color: #a5d6ff;
+}
+
+.code-block .number {
+  color: #79c0ff;
+}
+
+.code-block .boolean {
+  color: #79c0ff;
+  font-weight: bold;
+}
+
+.code-block .comment {
+  color: #7c8e9a;
+  font-style: italic;
+}
+
+.code-block .property {
+  color: #79c0ff;
+}
+
+.code-block .value {
+  color: #a5d6ff;
+}
+
+.code-block .tag {
+  color: #7ee787;
+}
+
+.code-block .attr-name {
+  color: #79c0ff;
+}
+
+.code-block .attr-value {
+  color: #a5d6ff;
+}
+
+/* Código inline */
+.inline-code {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 0.9em;
+  color: #ff7b72;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Contenido de mensaje mejorado */
+.message-content {
+  line-height: 1.6;
+}
+
+.text-content {
+  margin-bottom: 8px;
+}
+
+.text-content:last-child {
+  margin-bottom: 0;
+}
+
+.text-content strong {
+  color: #fff;
+  font-weight: 600;
+}
+
+.text-content em {
+  color: #a5d6ff;
+  font-style: italic;
+}
+
+/* Mejoras para los mensajes */
+.msg-content {
+  white-space: normal;
+}
+
+/* Scrollbar para bloques de código */
+.code-block::-webkit-scrollbar {
+  height: 8px;
+}
+
+.code-block::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+}
+
+.code-block::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+
+.code-block::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Números de línea */
+.code-block.line-numbers {
+  padding-left: 3.8em;
+  position: relative;
+}
+
+.code-block.line-numbers::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 3.8em;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.05);
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Animación para el botón de copiar */
+.code-copy-btn svg {
+  transition: transform 0.2s ease;
+}
+
+.code-copy-btn:active svg {
+  transform: scale(0.9);
+}

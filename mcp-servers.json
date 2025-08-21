@@ -57,11 +57,14 @@
       }
     },
     "copilot-terminal": {
-      "command": "npx",
+      "type": "stdio",
+      "command": "node",
       "args": [
-        "copilot-terminal-mcp",
-        "start"
+        "src/shared/infrastructure/mcp/servers/copilot-terminal-server.js"
       ],
+      "description": "AI-powered terminal assistance with Copilot integration",
+      "category": "development",
+      "enabled": true,
       "env": {
         "NODE_ENV": "production",
         "MAX_TERMINALS": "20",

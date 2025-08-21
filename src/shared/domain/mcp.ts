@@ -24,6 +24,7 @@ export interface McpServer {
   status?: 'stopped' | 'starting' | 'ready' | 'error' | 'connecting' | 'closed';
   description?: string;
   category?: string;
+  priority?: number; // Added priority field for tool ordering
 }
 
 export interface McpToolCall {

@@ -563,13 +563,85 @@ export class McpManager extends EventEmitter {
   getAllTools(): McpTool[] {
     const allTools = [...this.builtinTools];
     
-    for (const serverState of this.servers.values()) {
-      if (serverState.status === 'ready') {
-        allTools.push(...serverState.tools);
-      }
+    // Get all servers with their tools and sort by priority
+    const serverEntries = Array.from(this.servers.entries())
+      .filter(([_, serverState]) => serverState.status === 'ready')
+      .sort((a, b) => {
+        const priorityA = a[1].config.priority || 999;
+        const priorityB = b[1].config.priority || 999;
+        return priorityA - priorityB;
+      });
+
+    // Add tools in priority order
+    for (const [_, serverState] of serverEntries) {
+      allTools.push(...serverState.tools);
     }
     
     return allTools;
+  }
+
+  getAllToolsPrioritized(maxTools?: number): McpTool[] {
+    const allTools = this.getAllTools(); // Already prioritized by server priority
+    
+    if (maxTools && allTools.length > maxTools) {
+      // Additional terminal tool prioritization within the already sorted list
+      const terminalToolNames = [
+        'mcp_copilot-termi',
+        'run_terminal_command',
+        'get_terminal_output', 
+        'create_terminal',
+        'list_terminals',
+        'kill_terminal',
+        'send_command',
+        'execute_command',
+        'terminal',
+        'command'
+      ];
+      
+      const prioritizedTools: McpTool[] = [];
+      const remainingTools: McpTool[] = [];
+      
+      allTools.forEach(tool => {
+        if (terminalToolNames.some(name => 
+          tool.name.toLowerCase().includes(name.toLowerCase()) || 
+          tool.description?.toLowerCase().includes('terminal') ||
+          tool.description?.toLowerCase().includes('command')
+        )) {
+          prioritizedTools.push(tool);
+        } else {
+          remainingTools.push(tool);
+        }
+      });
+      
+      // Return terminal tools first, then fill with others up to maxTools
+      const result = [...prioritizedTools];
+      const remainingSlots = maxTools - result.length;
+      if (remainingSlots > 0) {
+        result.push(...remainingTools.slice(0, remainingSlots));
+      }
+      
+      return result.slice(0, maxTools);
+    }
+    
+    return allTools;
+  }
+
+  // Get only terminal-focused tools for terminal-heavy workflows
+  getTerminalTools(): McpTool[] {
+    const allTools = this.getAllTools();
+    
+    return allTools.filter(tool => {
+      const isTerminalTool = tool.name.toLowerCase().includes('terminal') ||
+                           tool.name.toLowerCase().includes('command') ||
+                           tool.name.toLowerCase().includes('mcp_copilot-termi') ||
+                           tool.description?.toLowerCase().includes('terminal') ||
+                           tool.description?.toLowerCase().includes('command');
+      
+      // Also include essential filesystem tools that work well with terminal workflows
+      const isEssentialFileSystem = ['read_file', 'write_file', 'list_dir'].includes(tool.name);
+      
+      return isTerminalTool || isEssentialFileSystem;
+    });
   }
 
   findServerForTool(toolName: string): string | null {

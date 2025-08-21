@@ -37,12 +37,14 @@ export class OllamaClient {
     if (tools && tools.length > 0 && supportsTools) {
       // Limit tools to prevent UI freezing with smaller models
       const maxTools = this.getMaxToolsForModel(req.model);
+      
+      // Tools are already prioritized by MCP Manager, so we just slice the first maxTools
       const limitedTools = tools.slice(0, maxTools);
       
       console.log(`🔧 Tools available: ${tools.length}, sending to Ollama: ${limitedTools.length} (max: ${maxTools})`);
       
       if (tools.length > maxTools) {
-        console.log(`ℹ️ Limited tools for model ${req.model} to prevent performance issues`);
+        console.log(`ℹ️ Limited tools for model ${req.model} to prevent performance issues (terminal tools prioritized)`);
       }
       
       payload.tools = limitedTools.map(tool => {

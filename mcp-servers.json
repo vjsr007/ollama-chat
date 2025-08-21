@@ -65,6 +65,7 @@
       "description": "AI-powered terminal assistance with Copilot integration",
       "category": "development",
       "enabled": true,
+      "priority": 1,
       "env": {
         "NODE_ENV": "production",
         "MAX_TERMINALS": "20",

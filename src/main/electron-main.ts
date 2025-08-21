@@ -83,13 +83,14 @@ ipcMain.handle('models:list', async () => {
 });
 
 ipcMain.handle('chat:send', async (_e, req: ChatRequest) => {
-  // Get available MCP tools
+  // Get available MCP tools with terminal tools prioritized
   console.log('🔄 Main: Received chat request from renderer');
   console.log('📝 Main: Request model:', req.model);
   console.log('📝 Main: Request messages count:', req.messages.length);
   
-  const tools = await mcpManager.getAllTools();
+  const tools = mcpManager.getAllToolsPrioritized();
   console.log('🛠️ Main: Retrieved tools count:', tools.length);
+  console.log('🔧 Main: Terminal tools prioritized');
   
   const result = await ollama.generate(req, tools);
   console.log('📤 Main: Generated result:', result);

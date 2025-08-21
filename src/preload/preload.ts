@@ -19,12 +19,19 @@ export const mcpApi = {
   getServerTools: (serverId: string) => ipcRenderer.invoke('mcp:get-server-tools', serverId)
 };
 
+export const electronApi = {
+  getAvailableTools: () => ipcRenderer.invoke('tools:get-available'),
+  updateToolStatus: (toolName: string, enabled: boolean) => ipcRenderer.invoke('tools:update-status', toolName, enabled)
+};
+
 contextBridge.exposeInMainWorld('ollama', api);
 contextBridge.exposeInMainWorld('mcp', mcpApi);
+contextBridge.exposeInMainWorld('electronAPI', electronApi);
 
 declare global {
   interface Window {
     ollama: typeof api;
     mcp: typeof mcpApi;
+    electronAPI: typeof electronApi;
   }
 }

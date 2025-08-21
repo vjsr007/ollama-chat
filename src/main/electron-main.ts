@@ -186,3 +186,60 @@ ipcMain.handle('mcp:remove-server', async (_e, id: string) => {
 ipcMain.handle('mcp:get-server-tools', async (_e, serverId: string) => {
   return mcpManager.getServerTools(serverId);
 });
+
+// Tool Management Handlers
+ipcMain.handle('tools:get-available', async () => {
+  try {
+    const tools = mcpManager.getAllTools();
+    const servers = mcpManager.getServers();
+    
+    const formattedTools = tools.map(tool => {
+      // Try to find which server this tool belongs to
+      let serverInfo = 'builtin';
+      let category = 'general';
+      
+      if (tool.origin === 'builtin') {
+        serverInfo = 'builtin';
+        category = 'system';
+      } else {
+        // Find server that has this tool
+        for (const server of servers) {
+          const serverTools = mcpManager.getServerTools(server.id);
+          if (serverTools.some(t => t.name === tool.name)) {
+            serverInfo = server.name;
+            category = server.category || 'mcp';
+            break;
+          }
+        }
+      }
+      
+      return {
+        name: tool.name,
+        description: tool.description || 'No description available',
+        server: serverInfo,
+        category: category,
+        enabled: true // Default to enabled, could be stored in config later
+      };
+    });
+    
+    return { success: true, tools: formattedTools };
+  } catch (error) {
+    console.error('Error getting available tools:', error);
+    return { success: false, tools: [] };
+  }
+});
+
+ipcMain.handle('tools:update-status', async (_e, toolName: string, enabled: boolean) => {
+  try {
+    // This could be expanded to actually manage tool status in the MCP manager
+    // For now, we'll just log the change
+    console.log(`Tool ${toolName} ${enabled ? 'enabled' : 'disabled'}`);
+    
+    // TODO: Implement actual tool enable/disable logic in McpManager
+    // This would require storing tool preferences and filtering tools accordingly
+    return { success: true };
+  } catch (error) {
+    console.error('Error updating tool status:', error);
+    return { success: false };
+  }
+});

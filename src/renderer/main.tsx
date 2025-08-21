@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { ChatMessage } from '../shared/domain/chat';
 import { McpTools } from './components/McpTools';
 import MessageContent from './components/MessageContent';
+import ToolManager from './components/ToolManager';
 import type { McpToolCall, McpToolResult } from '../shared/domain/mcp';
 import './styles.css';
 
@@ -15,6 +16,7 @@ const App: React.FC = () => {
   const [imagePath, setImagePath] = useState<string | undefined>();
   const [systemPrompt, setSystemPrompt] = useState('You are a helpful assistant.');
   const [activeTab, setActiveTab] = useState<'chat' | 'tools'>('chat');
+  const [isToolManagerOpen, setIsToolManagerOpen] = useState(false);
   const chatRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -115,6 +117,13 @@ const App: React.FC = () => {
           >
             🛠️ Tools
           </button>
+          <button 
+            className="tab-btn tool-manager-btn"
+            onClick={() => setIsToolManagerOpen(true)}
+            title="Gestionar herramientas disponibles para el modelo"
+          >
+            ⚙️ Configurar
+          </button>
         </div>
         <div className="actions">
           <button onClick={() => setMessages([])} disabled={!messages.length || isLoading}>Clear</button>
@@ -176,6 +185,12 @@ const App: React.FC = () => {
           <McpTools onToolCall={handleToolCall} />
         </div>
       )}
+      
+      <ToolManager 
+        isOpen={isToolManagerOpen}
+        onClose={() => setIsToolManagerOpen(false)}
+        currentModel={model}
+      />
     </div>
   );
 };

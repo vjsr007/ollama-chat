@@ -486,21 +486,27 @@ export class McpManager extends EventEmitter {
     }
     
     // Call external server tool
-    if (!serverId) {
-      throw new Error('Server ID required for external tools');
+    let targetServerId = serverId;
+    if (!targetServerId) {
+      // Try to find which server provides this tool
+      const foundServerId = this.findServerForTool(tool);
+      if (!foundServerId) {
+        throw new Error(`Tool '${tool}' not found in any available server`);
+      }
+      targetServerId = foundServerId;
     }
-    
-    const serverState = this.servers.get(serverId);
+
+    const serverState = this.servers.get(targetServerId);
     if (!serverState) {
-      throw new Error(`Server ${serverId} not found`);
+      throw new Error(`Server ${targetServerId} not found`);
     }
     
     if (serverState.status !== 'ready') {
-      throw new Error(`Server ${serverId} not ready (status: ${serverState.status})`);
+      throw new Error(`Server ${targetServerId} not ready (status: ${serverState.status})`);
     }
     
     try {
-      const result = await this.sendJsonRpcRequest(serverId, {
+      const result = await this.sendJsonRpcRequest(targetServerId, {
         jsonrpc: '2.0',
         id: `tool-${Date.now()}-${serverState.nextId++}`,
         method: 'tools/call',
@@ -510,7 +516,7 @@ export class McpManager extends EventEmitter {
       return {
         result: result.content || result,
         metadata: {
-          serverId,
+          serverId: targetServerId,
           cached: false
         }
       };
@@ -564,6 +570,26 @@ export class McpManager extends EventEmitter {
     }
     
     return allTools;
+  }
+
+  findServerForTool(toolName: string): string | null {
+    // Check if it's a builtin tool first
+    const builtinTool = this.builtinTools.find(tool => tool.name === toolName);
+    if (builtinTool) {
+      return null; // builtin tools don't need a server ID
+    }
+
+    // Search through all servers for the tool
+    for (const [serverId, serverState] of this.servers.entries()) {
+      if (serverState.status === 'ready') {
+        const tool = serverState.tools.find(t => t.name === toolName);
+        if (tool) {
+          return serverId;
+        }
+      }
+    }
+
+    return null; // tool not found
   }
 
   // Auto-configuration for development environment

@@ -229,13 +229,13 @@ export const McpTools: React.FC<McpToolsProps> = ({ onToolCall }) => {
                   onClick={() => toggleServer(server.id, server.status)}
                   className={`btn-toggle ${server.status === 'ready' ? 'btn-stop' : 'btn-start'}`}
                 >
-                  {server.status === 'ready' ? 'Detener' : 'Iniciar'}
+                  {server.status === 'ready' ? 'Stop' : 'Start'}
                 </button>
                 <button
                   onClick={() => removeServer(server.id)}
                   className="btn-remove"
                 >
-                  Eliminar
+                  Remove
                 </button>
               </div>
             </div>

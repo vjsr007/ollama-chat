@@ -84,8 +84,62 @@ ipcMain.handle('models:list', async () => {
 
 ipcMain.handle('chat:send', async (_e, req: ChatRequest) => {
   // Get available MCP tools
+  console.log('🔄 Main: Received chat request from renderer');
+  console.log('📝 Main: Request model:', req.model);
+  console.log('📝 Main: Request messages count:', req.messages.length);
+  
   const tools = await mcpManager.getAllTools();
-  return await ollama.generate(req, tools);
+  console.log('🛠️ Main: Retrieved tools count:', tools.length);
+  
+  const result = await ollama.generate(req, tools);
+  console.log('📤 Main: Generated result:', result);
+  
+  // Check if the model wants to use tools
+  if (result.needsToolExecution && result.toolCalls) {
+    console.log('🔧 Main: Executing tool calls:', result.toolCalls.length);
+    
+    try {
+      // Execute each tool call
+      const toolResults = [];
+      for (const toolCall of result.toolCalls) {
+        const toolName = toolCall.function.name;
+        const toolArgs = toolCall.function.arguments;
+        
+        console.log(`�️ Main: Executing tool ${toolName} with args:`, toolArgs);
+        
+        // Execute the tool using MCP Manager
+        const mcpToolCall: McpToolCall = {
+          tool: toolName,
+          args: toolArgs
+        };
+        const toolResult = await mcpManager.callTool(mcpToolCall);
+        toolResults.push({
+          role: 'tool',
+          content: JSON.stringify(toolResult),
+          tool_call_id: toolCall.id || toolName
+        });
+      }
+      
+      // Add tool results to conversation and get final response
+      const updatedMessages = [
+        ...req.messages,
+        { role: 'assistant', content: result.content, tool_calls: result.toolCalls },
+        ...toolResults
+      ];
+      
+      console.log('🔄 Main: Sending follow-up request with tool results');
+      const finalResult = await ollama.generate({ ...req, messages: updatedMessages }, tools);
+      console.log('📤 Main: Final result after tool execution:', finalResult.content);
+      
+      return finalResult.content;
+    } catch (error) {
+      console.error('❌ Main: Error executing tools:', error);
+      return `❌ Error executing tools: ${error instanceof Error ? error.message : 'Unknown error'}`;
+    }
+  }
+  
+  console.log('�📏 Main: Result length:', result.content?.length || 0);
+  return result.content;
 });
 
 ipcMain.handle('dialog:openImage', async () => {

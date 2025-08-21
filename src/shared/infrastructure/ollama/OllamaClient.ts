@@ -4,6 +4,12 @@ import path from 'path';
 import { ChatRequest, ChatMessage } from '../../domain/chat';
 import type { McpTool } from '../../domain/mcp';
 
+export interface OllamaResponse {
+  needsToolExecution: boolean;
+  content: string;
+  toolCalls?: any[];
+}
+
 export class OllamaClient {
   private baseUrl: string;
   constructor(baseUrl: string = process.env.OLLAMA_BASE_URL || 'http://localhost:11434') {
@@ -15,7 +21,7 @@ export class OllamaClient {
     return (data.models || []).map((m: any) => m.name);
   }
 
-  async generate(req: ChatRequest, tools?: McpTool[]): Promise<string> {
+  async generate(req: ChatRequest, tools?: McpTool[]): Promise<OllamaResponse> {
     // Convert messages to format expected by Ollama /api/chat
     const messages = await Promise.all(req.messages.map(m => this.mapMessage(m)));
     
@@ -77,8 +83,42 @@ export class OllamaClient {
       console.warn(`⚠️ Model ${req.model} does not support tools. Use llama3.1, qwen2.5, or another compatible model.`);
     }
 
-    const { data } = await axios.post(`${this.baseUrl}/api/chat`, payload);
-    return data.message?.content ?? '';
+    console.log('📡 Sending request to Ollama API...');
+    try {
+      const { data } = await axios.post(`${this.baseUrl}/api/chat`, payload, {
+        timeout: 60000, // 60 second timeout
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+      console.log('✅ Received response from Ollama API');
+      console.log('📄 Response data:', JSON.stringify(data, null, 2));
+      console.log('💬 Message content:', data.message?.content);
+      
+      // Check if the response contains tool calls
+      if (data.message?.tool_calls && data.message.tool_calls.length > 0) {
+        console.log('🔧 Model wants to use tools:', data.message.tool_calls.length);
+        return { 
+          needsToolExecution: true, 
+          toolCalls: data.message.tool_calls,
+          content: data.message?.content || ''
+        };
+      }
+      
+      const content = data.message?.content ?? '';
+      console.log('🔍 Final content to return:', content);
+      return { needsToolExecution: false, content };
+    } catch (error) {
+      console.error('❌ Error calling Ollama API:', error);
+      if (axios.isAxiosError(error)) {
+        if (error.code === 'ECONNREFUSED') {
+          throw new Error('Cannot connect to Ollama server. Please make sure Ollama is running on http://localhost:11434');
+        } else if (error.code === 'ECONNABORTED') {
+          throw new Error('Request timed out. The model might be taking too long to process the request.');
+        }
+      }
+      throw error;
+    }
   }
 
   private async modelSupportsTools(modelName: string): Promise<boolean> {
@@ -105,10 +145,12 @@ export class OllamaClient {
       return 15; // Very conservative for 8B models
     } else if (lowerName.includes('llama3.1') && lowerName.includes('70b')) {
       return 40; // More tools for larger models
+    } else if (lowerName.includes('qwen2.5:latest') || lowerName.includes('qwen2.5:32b')) {
+      return 25; // Good balance for Qwen2.5 latest
     } else if (lowerName.includes('qwen2.5') && lowerName.includes('14b')) {
-      return 25; // Medium for 14B models
-    } else if (lowerName.includes('qwen2.5') && lowerName.includes('32b')) {
-      return 35; // More for larger Qwen models
+      return 20; // Medium for 14B models
+    } else if (lowerName.includes('qwen2.5') && lowerName.includes('7b')) {
+      return 15; // Conservative for 7B
     } else if (lowerName.includes('mistral-large')) {
       return 50; // Mistral Large can handle more
     } else if (lowerName.includes('mistral-nemo')) {

@@ -30,6 +30,7 @@
     "mcp:quick": "npx ts-node --project tsconfig.tools.json src/tools/quick-install.ts"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.17.3",
     "axios": "^1.7.2",
     "chokidar": "^3.6.0",
     "cors": "^2.8.5",

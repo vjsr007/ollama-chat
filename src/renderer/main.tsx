@@ -37,9 +37,38 @@ const App: React.FC = () => {
     setInput('');
     setImagePath(undefined);
     setIsLoading(true);
-    const reply = await window.ollama.sendChat({ model, messages: newMessages });
-    setMessages([...newMessages, { role: 'assistant', content: reply }]);
-    setIsLoading(false);
+    
+    try {
+      console.log('🚀 UI: Sending chat request...');
+      console.log('📝 UI: Messages being sent:', newMessages);
+      console.log('🤖 UI: Model:', model);
+      
+      const reply = await window.ollama.sendChat({ model, messages: newMessages });
+      
+      console.log('📨 UI: Received reply from main process:', reply);
+      console.log('📏 UI: Reply length:', reply?.length || 0);
+      console.log('🔤 UI: Reply type:', typeof reply);
+      
+      if (!reply || reply.trim() === '') {
+        console.warn('⚠️ UI: Empty or null reply received');
+        setMessages([...newMessages, { 
+          role: 'assistant', 
+          content: '⚠️ Received empty response from AI model. Please try again.' 
+        }]);
+      } else {
+        console.log('✅ UI: Adding reply to messages');
+        setMessages([...newMessages, { role: 'assistant', content: reply }]);
+      }
+    } catch (error) {
+      console.error('Error sending message:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      setMessages([...newMessages, { 
+        role: 'assistant', 
+        content: `❌ Error: ${errorMessage}. Please check that Ollama is running and the model is available.` 
+      }]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const pickImage = async () => {

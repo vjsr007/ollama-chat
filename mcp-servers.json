@@ -7,11 +7,15 @@
       "command": "npx",
       "args": [
         "@modelcontextprotocol/server-filesystem",
-        "D:\\MyProjects\\ollama-chat"
+        "C:\\"
       ],
-      "description": "Secure file system access",
+      "description": "Unrestricted file system access - full computer access",
       "category": "core",
-      "enabled": true
+      "enabled": true,
+      "priority": 5,
+      "env": {
+        "MCP_FILESYSTEM_ALLOW_PARENT": "true"
+      }
     },
     "github": {
       "type": "stdio",
@@ -70,6 +74,48 @@
         "NODE_ENV": "production",
         "MAX_TERMINALS": "20",
         "COMMAND_TIMEOUT": "30000"
+      }
+    },
+    "system-access": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "src/shared/infrastructure/mcp/servers/system-access-server.js"
+      ],
+      "description": "Unrestricted system access - complete file system, command execution",
+      "category": "system",
+      "enabled": true,
+      "priority": 2,
+      "env": {
+        "UNRESTRICTED_ACCESS": "true"
+      }
+    },
+    "process-control": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "src/shared/infrastructure/mcp/servers/process-control-server.js"
+      ],
+      "description": "Full process and service control - start, stop, monitor, manage",
+      "category": "system",
+      "enabled": true,
+      "priority": 3,
+      "env": {
+        "ADMIN_PRIVILEGES": "true"
+      }
+    },
+    "hardware-access": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "src/shared/infrastructure/mcp/servers/hardware-access-server.js"
+      ],
+      "description": "Hardware and device access - sensors, drivers, performance counters",
+      "category": "hardware",
+      "enabled": true,
+      "priority": 4,
+      "env": {
+        "HARDWARE_ACCESS": "unrestricted"
       }
     }
   }

@@ -1,9 +1,13 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import path from 'path';
-// MCP Manager
 import { McpManager } from '../shared/infrastructure/mcp/McpManager';
 import ToolConfigManager from './tool-config';
 import { ExternalModelManager } from './external-models';
+
+console.log('🚀 Electron main process starting...');
+console.log('📂 Process working directory:', process.cwd());
+console.log('📂 __dirname:', __dirname);
+
 // Dynamic resolution of OllamaClient considering different build structures
 let OllamaClientMod: any;
 const candidatePaths = [
@@ -14,395 +18,656 @@ const candidatePaths = [
   // Fallback to source code (dev)
   path.join(process.cwd(), 'src/shared/infrastructure/ollama/OllamaClient.ts')
 ];
+
+console.log('🔍 Searching for OllamaClient module...');
 for (const p of candidatePaths) {
   try {
+    console.log('📝 Trying path:', p);
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     OllamaClientMod = require(p);
+    console.log('✅ Found OllamaClient at:', p);
     break;
-  } catch { /* continue */ }
+  } catch (error) {
+    console.log('❌ Module not found at:', p);
+  }
 }
-if (!OllamaClientMod) {
-  throw new Error('Could not load OllamaClient module in any of the expected paths');
-}
-const { OllamaClient } = OllamaClientMod;
-// Types
-import type { ChatRequest } from '../shared/domain/chat';
-import type { McpToolCall, McpServer } from '../shared/domain/mcp';
 
+if (!OllamaClientMod) {
+  console.error('💥 Critical Error: OllamaClient module not found in any of the candidate paths');
+  process.exit(1);
+}
+
+const { OllamaClient } = OllamaClientMod;
+console.log('🎯 OllamaClient successfully imported');
+
+// Global instances
 let mainWindow: BrowserWindow | null = null;
-const ollama = new OllamaClient();
-const mcpManager = new McpManager(process.cwd());
+const ollamaClient = new OllamaClient();
+const mcpManager = new McpManager();
 const toolConfigManager = new ToolConfigManager();
 const externalModelManager = new ExternalModelManager();
 
-async function createWindow() {
+console.log('🏗️ Creating global instances completed');
+
+function createWindow(): void {
+  console.log('🪟 Creating main window...');
+  
   mainWindow = new BrowserWindow({
-    width: 1100,
-    height: 780,
+    width: 1200,
+    height: 800,
     webPreferences: {
-      // __dirname = dist/main/main -> preload build = dist/preload/preload/preload.js
-      preload: path.join(__dirname, '..', '..', 'preload', 'preload', 'preload.js'),
-      contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
-    }
+      contextIsolation: true,
+      preload: path.join(__dirname, '../../preload/preload/preload.js'),
+    },
   });
 
-  // __dirname -> dist/main/main en build. Queremos llegar a dist/renderer/index.html
-  const prodIndex = path.join(__dirname, '..', '..', 'renderer', 'index.html');
-  const url = process.env.VITE_DEV_SERVER_URL || `file://${prodIndex.replace(/\\/g, '/')}`;
-  await mainWindow.loadURL(url);
-  mainWindow.webContents.on('did-fail-load', (_e, errorCode, errorDesc, validatedURL) => {
-    console.error('Fallo al cargar', { errorCode, errorDesc, validatedURL, tried: url });
+  console.log('📱 Main window created with dimensions: 1200x800');
+
+  const isDev = process.env.NODE_ENV === 'development';
+  if (isDev) {
+    console.log('🔧 Development mode detected, loading from Vite dev server');
+    mainWindow.loadURL('http://localhost:5173');
+    mainWindow.webContents.openDevTools();
+  } else {
+    console.log('🏭 Production mode, loading from built files');
+    const rendererPath = path.join(__dirname, '../../renderer/index.html');
+    console.log('📂 Loading renderer from:', rendererPath);
+    mainWindow.loadFile(rendererPath);
+  }
+
+  console.log('✅ Window content loaded successfully');
+
+  mainWindow.on('closed', () => {
+    console.log('❌ Main window closed');
+    mainWindow = null;
   });
-  if (process.env.VITE_DEV_SERVER_URL) mainWindow.webContents.openDevTools();
 }
 
-app.whenReady().then(async () => {
-  createWindow();
+// IPC Handlers with comprehensive logging
+console.log('📡 Setting up IPC handlers...');
+
+// Chat request handler
+ipcMain.handle('chat', async (event, request) => {
+  console.log('📨 Main: Received chat request from renderer');
+  console.log('🤖 Main: Request model:', request.model);
+  console.log('💬 Main: Request messages count:', request.messages?.length || 0);
   
-  // Cargar configuración MCP por defecto
   try {
-    // Usar el directorio del proyecto, no __dirname que apunta a dist/main
-    // __dirname = dist/main, necesitamos subir 2 niveles para llegar al proyecto
-    const projectRoot = path.join(__dirname, '..', '..', '..');
-    console.log('🔍 Project root calculated:', projectRoot);
-    await mcpManager.loadDefaultConfiguration(projectRoot);
-    console.log('🔧 MCP Manager initialized');
+    // Get all available tools
+    const allTools = mcpManager.getAllTools();
+    console.log('🛠️ Main: All available tools:', allTools.length);
     
-    // Inicializar configuración de herramientas
-    await toolConfigManager.loadConfig();
-    console.log('⚙️ Tool Configuration Manager initialized');
-  } catch (error) {
-    console.error('⚠️ Error inicializando MCP Manager:', error);
-  }
-  
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
-  });
-});
-
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
-});
-
-ipcMain.handle('models:list', async () => {
-  // Get both Ollama models and external models
-  const ollamaModels = await ollama.listModels();
-  const externalModels = externalModelManager.getEnabledModels();
-  
-  // Format external models for the UI
-  const externalModelNames = externalModels.map(model => 
-    `${model.provider}:${model.name} (${model.model})`
-  );
-  
-  return [...ollamaModels, ...externalModelNames];
-});
-
-ipcMain.handle('chat:send', async (_e, req: ChatRequest) => {
-  // Get available MCP tools with terminal tools prioritized
-  console.log('🔄 Main: Received chat request from renderer');
-  console.log('📝 Main: Request model:', req.model);
-  console.log('📝 Main: Request messages count:', req.messages.length);
-  
-  // Check if this is an external model (format: "provider:name (actual_model)")
-  // Ollama models use format like "qwen2.5:latest" while external models use "openai:GPT-4 (gpt-4)"
-  const isExternalModelFormat = req.model.includes(':') && req.model.includes('(') && req.model.includes(')');
-  
-  if (isExternalModelFormat) {
-    try {
-      console.log('🔍 Main: Attempting to parse external model format:', req.model);
-      
-      // Parse external model format: "provider:name (actual_model)"
-      const match = req.model.match(/^([^:]+):(.+?) \(([^)]+)\)$/);
-      console.log('🔍 Main: Regex match result:', match);
-      
-      if (match) {
-        const [, provider, name, actualModel] = match;
-        console.log('🔍 Main: Parsed components:', { provider, name, actualModel });
-        
-        // Find the external model
-        const externalModels = externalModelManager.getEnabledModels();
-        const externalModel = externalModels.find(m => 
-          m.provider === provider && m.name === name && m.model === actualModel
-        );
-        
-        if (externalModel) {
-          console.log('🌐 Main: Using external model:', externalModel.name);
-          
-          // Convert messages to the right format
-          const formattedMessages = req.messages.map(msg => ({
-            role: msg.role,
-            content: msg.content
-          }));
-          
-          const result = await externalModelManager.generateChatCompletion(
-            externalModel.id,
-            formattedMessages,
-            {
-              temperature: externalModel.temperature,
-              maxTokens: externalModel.maxTokens
-            }
-          );
-          
-          console.log('📤 Main: External model result length:', result.length);
-          return result;
-        }
-      }
-      
-      // If parsing failed, fall back to error
-      throw new Error('Invalid external model format');
-    } catch (error) {
-      console.error('❌ Main: Error with external model:', error);
-      return `❌ Error with external model: ${error instanceof Error ? error.message : 'Unknown error'}`;
-    }
-  }
-  
-  // Obtener herramientas filtradas por modelo y configuración
-  const allTools = mcpManager.getAllToolsPrioritized();
-  const enabledToolNames = toolConfigManager.getEnabledToolsForModel(req.model, allTools.map(t => t.name));
-  const filteredTools = allTools.filter(tool => enabledToolNames.includes(tool.name));
-  
-  console.log('🛠️ Main: All available tools:', allTools.length);
-  console.log('✅ Main: Enabled tools for model:', filteredTools.length);
-  console.log('🔧 Main: Terminal tools prioritized and filtered by model configuration');
-  
-  const result = await ollama.generate(req, filteredTools);
-  console.log('📤 Main: Generated result:', result);
-  
-  // Check if the model wants to use tools
-  if (result.needsToolExecution && result.toolCalls) {
-    console.log('🔧 Main: Executing tool calls:', result.toolCalls.length);
+    // Get tool names for filtering
+    const toolNames = allTools.map(tool => tool.name);
     
-    try {
-      // Execute each tool call
+    // Filter tools by model config
+    const enabledToolNames = toolConfigManager.getEnabledToolsForModel(request.model, toolNames);
+    const enabledTools = allTools.filter(tool => enabledToolNames.includes(tool.name));
+    console.log('✅ Main: Enabled tools for model:', enabledTools.length);
+    console.log('🎯 Main: Terminal tools prioritized and filtered by model configuration');
+
+    // Add tools to request
+    console.log('🎯 Tools available:', allTools.length, 'sending to Ollama:', enabledTools.length, '(max: 25)');
+
+    // Generate response
+    const result = await ollamaClient.generate(request, enabledTools);
+    console.log('📈 Main: Generated result:', {
+      needsToolExecution: result.needsToolExecution,
+      toolCalls: result.toolCalls?.length || 0,
+      content: result.content?.substring(0, 100) + (result.content?.length > 100 ? '...' : '')
+    });
+
+    // Execute tool calls if needed
+    if (result.needsToolExecution && result.toolCalls) {
+      console.log('🔧 Main: Executing tool calls:', result.toolCalls.length);
+      
       const toolResults = [];
       for (const toolCall of result.toolCalls) {
-        const toolName = toolCall.function.name;
-        const toolArgs = toolCall.function.arguments;
-        
-        console.log(`�️ Main: Executing tool ${toolName} with args:`, toolArgs);
-        
-        // Execute the tool using MCP Manager
-        const mcpToolCall: McpToolCall = {
-          tool: toolName,
-          args: toolArgs
-        };
-        const toolResult = await mcpManager.callTool(mcpToolCall);
-        toolResults.push({
-          role: 'tool',
-          content: JSON.stringify(toolResult),
-          tool_call_id: toolCall.id || toolName
-        });
+        try {
+          console.log('🛠️ Main: Executing tool', toolCall.function.name, 'with args:', JSON.stringify(toolCall.function.arguments));
+          const toolResult = await mcpManager.callTool({
+            tool: toolCall.function.name,
+            args: toolCall.function.arguments,
+            serverId: undefined // Let MCP manager find the appropriate server
+          });
+          toolResults.push({
+            role: 'tool',
+            content: JSON.stringify(toolResult)
+          });
+          console.log('✅ Main: Tool', toolCall.function.name, 'executed successfully');
+        } catch (error) {
+          console.error('❌ Main: Error executing tool', toolCall.function.name, ':', error);
+          toolResults.push({
+            role: 'tool',
+            content: JSON.stringify({ error: error instanceof Error ? error.message : String(error) })
+          });
+        }
       }
+
+      // Add tool results to messages and generate final response
+      const newMessages = [...request.messages, { role: 'assistant', content: result.content }, ...toolResults];
+      console.log('📨 Main: Sending follow-up request with tool results');
       
-      // Add tool results to conversation and get final response
-      const updatedMessages = [
-        ...req.messages,
-        { role: 'assistant', content: result.content, tool_calls: result.toolCalls },
-        ...toolResults
-      ];
-      
-      console.log('🔄 Main: Sending follow-up request with tool results');
-      const finalResult = await ollama.generate({ ...req, messages: updatedMessages }, filteredTools);
-      console.log('📤 Main: Final result after tool execution:', finalResult.content);
-      
-      return finalResult.content;
-    } catch (error) {
-      console.error('❌ Main: Error executing tools:', error);
-      return `❌ Error executing tools: ${error instanceof Error ? error.message : 'Unknown error'}`;
+      const finalRequest = {
+        ...request,
+        messages: newMessages
+      };
+
+      const finalResult = await ollamaClient.generate(finalRequest, enabledTools);
+      console.log('🎉 Main: Final response generated successfully');
+      return finalResult.content || '';
     }
+
+    return result.content || '';
+  } catch (error) {
+    console.error('💥 Main: Error executing tools:', error);
+    throw error;
   }
+});
+
+// Get available models handler
+ipcMain.handle('get-models', async () => {
+  console.log('📋 Main: Fetching available models...');
+  try {
+    const models = await ollamaClient.listModels();
+    console.log('✅ Main: Retrieved', models.length, 'models successfully');
+    return models;
+  } catch (error) {
+    console.error('❌ Main: Error fetching models:', error);
+    throw error;
+  }
+});
+
+// Additional handlers for preload compatibility
+ipcMain.handle('models:list', async () => {
+  console.log('📋 Main: Fetching models (compatibility handler)...');
+  try {
+    const models = await ollamaClient.listModels();
+    console.log('✅ Main: Retrieved', models.length, 'models successfully');
+    return models;
+  } catch (error) {
+    console.error('❌ Main: Error fetching models:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('chat:send', async (event, request) => {
+  console.log('📨 Main: Chat send (compatibility handler)');
+  console.log('🤖 Main: Request model:', request.model);
+  console.log('💬 Main: Request messages count:', request.messages?.length || 0);
   
-  console.log('�📏 Main: Result length:', result.content?.length || 0);
-  return result.content;
+  try {
+    // Get all available tools
+    const allTools = mcpManager.getAllTools();
+    console.log('🛠️ Main: All available tools:', allTools.length);
+    
+    // Get tool names for filtering
+    const toolNames = allTools.map(tool => tool.name);
+    
+    // Filter tools by model config
+    const enabledToolNames = toolConfigManager.getEnabledToolsForModel(request.model, toolNames);
+    const enabledTools = allTools.filter(tool => enabledToolNames.includes(tool.name));
+    console.log('✅ Main: Enabled tools for model:', enabledTools.length);
+
+    // Generate response
+    const result = await ollamaClient.generate(request, enabledTools);
+
+    // Execute tool calls if needed
+    if (result.needsToolExecution && result.toolCalls) {
+      console.log('🔧 Main: Executing tool calls:', result.toolCalls.length);
+      
+      const toolResults = [];
+      for (const toolCall of result.toolCalls) {
+        try {
+          const toolResult = await mcpManager.callTool({
+            tool: toolCall.function.name,
+            args: toolCall.function.arguments,
+            serverId: undefined // Let MCP manager find the appropriate server
+          });
+          toolResults.push({
+            role: 'tool',
+            content: JSON.stringify(toolResult)
+          });
+        } catch (error) {
+          toolResults.push({
+            role: 'tool',
+            content: JSON.stringify({ error: error instanceof Error ? error.message : String(error) })
+          });
+        }
+      }
+
+      // Generate final response
+      const newMessages = [...request.messages, { role: 'assistant', content: result.content }, ...toolResults];
+      const finalRequest = { ...request, messages: newMessages };
+      const finalResult = await ollamaClient.generate(finalRequest, enabledTools);
+      return finalResult.content || '';
+    }
+
+    return result.content || '';
+  } catch (error) {
+    console.error('💥 Main: Error in chat:send handler:', error);
+    throw error;
+  }
 });
 
-ipcMain.handle('dialog:openImage', async () => {
-  if (!mainWindow) return null;
-  const result = await dialog.showOpenDialog(mainWindow, {
-    title: 'Seleccionar imagen',
-    properties: ['openFile'],
-    filters: [ { name: 'Images', extensions: ['png','jpg','jpeg','webp'] } ]
-  });
-  if (result.canceled || result.filePaths.length === 0) return null;
-  return result.filePaths[0];
+// Get available tools handler
+ipcMain.handle('get-tools', async () => {
+  console.log('🛠️ Main: Fetching available tools...');
+  try {
+    const tools = await mcpManager.getAllTools();
+    console.log('✅ Main: Retrieved', tools.length, 'tools successfully');
+    return tools;
+  } catch (error) {
+    console.error('❌ Main: Error fetching tools:', error);
+    throw error;
+  }
 });
 
-// MCP IPC Handlers
+// MCP compatibility handlers
 ipcMain.handle('mcp:get-tools', async () => {
-  return mcpManager.getAllTools();
+  console.log('🛠️ Main: Fetching MCP tools (compatibility)...');
+  try {
+    const tools = mcpManager.getAllTools();
+    console.log('✅ Main: Retrieved', tools.length, 'MCP tools successfully');
+    return tools;
+  } catch (error) {
+    console.error('❌ Main: Error fetching MCP tools:', error);
+    throw error;
+  }
 });
 
-ipcMain.handle('mcp:call-tool', async (_e, call: McpToolCall) => {
-  return await mcpManager.callTool(call);
+ipcMain.handle('mcp:call-tool', async (event, call) => {
+  console.log('🔧 Main: Calling MCP tool:', call.tool);
+  try {
+    const result = await mcpManager.callTool(call);
+    console.log('✅ Main: MCP tool call completed successfully');
+    return result;
+  } catch (error) {
+    console.error('❌ Main: Error calling MCP tool:', error);
+    throw error;
+  }
 });
 
 ipcMain.handle('mcp:get-servers', async () => {
-  return mcpManager.getServers();
+  console.log('🖥️ Main: Fetching MCP servers...');
+  try {
+    const servers = mcpManager.getServers();
+    console.log('✅ Main: Retrieved', servers.length, 'MCP servers successfully');
+    return servers;
+  } catch (error) {
+    console.error('❌ Main: Error fetching MCP servers:', error);
+    throw error;
+  }
 });
 
-ipcMain.handle('mcp:add-server', async (_e, config: Omit<McpServer, 'id'>) => {
-  return await mcpManager.addServer(config);
+ipcMain.handle('mcp:add-server', async (event, config) => {
+  console.log('➕ Main: Adding MCP server:', config.name);
+  try {
+    const result = await mcpManager.addServer(config);
+    console.log('✅ Main: MCP server added successfully');
+    return result;
+  } catch (error) {
+    console.error('❌ Main: Error adding MCP server:', error);
+    throw error;
+  }
 });
 
-ipcMain.handle('mcp:start-server', async (_e, id: string) => {
-  await mcpManager.startServer(id);
+ipcMain.handle('mcp:start-server', async (event, id) => {
+  console.log('▶️ Main: Starting MCP server:', id);
+  try {
+    await mcpManager.startServer(id);
+    console.log('✅ Main: MCP server started successfully');
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Main: Error starting MCP server:', error);
+    throw error;
+  }
 });
 
-ipcMain.handle('mcp:stop-server', async (_e, id: string) => {
-  mcpManager.stopServer(id);
+ipcMain.handle('mcp:stop-server', async (event, id) => {
+  console.log('⏹️ Main: Stopping MCP server:', id);
+  try {
+    await mcpManager.stopServer(id);
+    console.log('✅ Main: MCP server stopped successfully');
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Main: Error stopping MCP server:', error);
+    throw error;
+  }
 });
 
-ipcMain.handle('mcp:remove-server', async (_e, id: string) => {
-  mcpManager.removeServer(id);
+ipcMain.handle('mcp:remove-server', async (event, id) => {
+  console.log('🗑️ Main: Removing MCP server:', id);
+  try {
+    await mcpManager.removeServer(id);
+    console.log('✅ Main: MCP server removed successfully');
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Main: Error removing MCP server:', error);
+    throw error;
+  }
 });
 
-ipcMain.handle('mcp:get-server-tools', async (_e, serverId: string) => {
-  return mcpManager.getServerTools(serverId);
+ipcMain.handle('mcp:get-server-tools', async (event, serverId) => {
+  console.log('🛠️ Main: Fetching tools for server:', serverId);
+  try {
+    const tools = mcpManager.getServerTools(serverId);
+    console.log('✅ Main: Retrieved', tools.length, 'tools for server', serverId);
+    return tools;
+  } catch (error) {
+    console.error('❌ Main: Error fetching server tools:', error);
+    throw error;
+  }
 });
 
-// Tool Management Handlers
+// Tool configuration handlers
+ipcMain.handle('get-tool-config', () => {
+  console.log('⚙️ Main: Fetching tool configuration...');
+  const config = {
+    tools: toolConfigManager.getToolConfig(),
+    modelLimits: toolConfigManager.getModelLimits()
+  };
+  console.log('✅ Main: Tool configuration retrieved successfully');
+  return config;
+});
+
+ipcMain.handle('update-tool-config', async (event, config) => {
+  console.log('💾 Main: Updating tool configuration...');
+  try {
+    // Update individual tool settings
+    if (config.tools) {
+      for (const [toolName, toolConfig] of Object.entries(config.tools)) {
+        await toolConfigManager.setToolEnabled(toolName, (toolConfig as any).enabled);
+      }
+    }
+    
+    // Update model limits
+    if (config.modelLimits) {
+      for (const [modelName, limit] of Object.entries(config.modelLimits)) {
+        await toolConfigManager.setModelLimit(modelName, limit as number);
+      }
+    }
+    
+    console.log('✅ Main: Tool configuration updated successfully');
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Main: Error updating tool configuration:', error);
+    throw error;
+  }
+});
+
+// External models handlers
+ipcMain.handle('get-external-models', async () => {
+  console.log('🌐 Main: Fetching external models...');
+  try {
+    const models = await externalModelManager.getModels();
+    console.log('✅ Main: Retrieved', models.length, 'external models successfully');
+    return models;
+  } catch (error) {
+    console.error('❌ Main: Error fetching external models:', error);
+    throw error;
+  }
+});
+
+// Tool management handlers for electronAPI compatibility
 ipcMain.handle('tools:get-available', async () => {
+  console.log('🛠️ Main: Fetching available tools (electronAPI)...');
   try {
     const tools = mcpManager.getAllTools();
-    const servers = mcpManager.getServers();
-    
-    const formattedTools = tools.map(tool => {
-      // Try to find which server this tool belongs to
-      let serverInfo = 'builtin';
-      let category = 'general';
-      
-      if (tool.origin === 'builtin') {
-        serverInfo = 'builtin';
-        category = 'system';
-      } else {
-        // Find server that has this tool
-        for (const server of servers) {
-          const serverTools = mcpManager.getServerTools(server.id);
-          if (serverTools.some(t => t.name === tool.name)) {
-            serverInfo = server.name;
-            category = server.category || 'mcp';
-            break;
-          }
-        }
-      }
-      
-      return {
-        name: tool.name,
-        description: tool.description || 'No description available',
-        server: serverInfo,
-        category: category,
-        enabled: toolConfigManager.isToolEnabled(tool.name) // Usar estado real de configuración
-      };
-    });
-    
-    return { success: true, tools: formattedTools };
+    console.log('✅ Main: Retrieved', tools.length, 'available tools successfully');
+    return tools;
   } catch (error) {
-    console.error('Error getting available tools:', error);
-    return { success: false, tools: [] };
+    console.error('❌ Main: Error fetching available tools:', error);
+    throw error;
   }
 });
 
-ipcMain.handle('tools:update-status', async (_e, toolName: string, enabled: boolean) => {
+ipcMain.handle('tools:update-status', async (event, toolName, enabled) => {
+  console.log('🔧 Main: Updating tool status:', toolName, 'enabled:', enabled);
   try {
     await toolConfigManager.setToolEnabled(toolName, enabled);
-    console.log(`🔧 Tool ${toolName} ${enabled ? 'enabled' : 'disabled'}`);
+    console.log('✅ Main: Tool status updated successfully');
     return { success: true };
   } catch (error) {
-    console.error('Error updating tool status:', error);
-    return { success: false };
+    console.error('❌ Main: Error updating tool status:', error);
+    throw error;
   }
 });
 
-// Handlers adicionales para gestión de modelos
 ipcMain.handle('tools:get-model-limits', async () => {
+  console.log('📊 Main: Fetching model limits...');
   try {
-    return { success: true, limits: toolConfigManager.getModelLimits() };
+    const limits = toolConfigManager.getModelLimits();
+    console.log('✅ Main: Retrieved model limits successfully');
+    return limits;
   } catch (error) {
-    console.error('Error getting model limits:', error);
-    return { success: false, limits: {} };
+    console.error('❌ Main: Error fetching model limits:', error);
+    throw error;
   }
 });
 
-ipcMain.handle('tools:set-model-limit', async (_e, modelName: string, limit: number) => {
+ipcMain.handle('tools:set-model-limit', async (event, modelName, limit) => {
+  console.log('📊 Main: Setting model limit:', modelName, 'limit:', limit);
   try {
     await toolConfigManager.setModelLimit(modelName, limit);
+    console.log('✅ Main: Model limit set successfully');
     return { success: true };
   } catch (error) {
-    console.error('Error setting model limit:', error);
-    return { success: false };
+    console.error('❌ Main: Error setting model limit:', error);
+    throw error;
   }
 });
 
-ipcMain.handle('tools:get-enabled-for-model', async (_e, modelName: string) => {
+ipcMain.handle('tools:get-enabled-for-model', async (event, modelName) => {
+  console.log('🎯 Main: Fetching enabled tools for model:', modelName);
   try {
-    const allTools = mcpManager.getAllTools().map(tool => tool.name);
-    const enabledTools = toolConfigManager.getEnabledToolsForModel(modelName, allTools);
-    return { success: true, tools: enabledTools };
+    const allTools = mcpManager.getAllTools();
+    const toolNames = allTools.map(tool => tool.name);
+    const enabledToolNames = toolConfigManager.getEnabledToolsForModel(modelName, toolNames);
+    console.log('✅ Main: Retrieved', enabledToolNames.length, 'enabled tools for model');
+    return enabledToolNames;
   } catch (error) {
-    console.error('Error getting enabled tools for model:', error);
-    return { success: false, tools: [] };
+    console.error('❌ Main: Error fetching enabled tools for model:', error);
+    throw error;
   }
 });
 
-// External Models Handlers
+// External models API handlers
 ipcMain.handle('external-models:get-all', async () => {
+  console.log('🌐 Main: Fetching all external models...');
   try {
-    const models = externalModelManager.getModels();
-    return { success: true, models };
+    const models = await externalModelManager.getModels();
+    console.log('✅ Main: Retrieved', models.length, 'external models successfully');
+    return models;
   } catch (error) {
-    console.error('Error getting external models:', error);
-    return { success: false, models: [] };
+    console.error('❌ Main: Error fetching external models:', error);
+    throw error;
   }
 });
 
-ipcMain.handle('external-models:add', async (_e, model: any) => {
+ipcMain.handle('external-models:add', async (event, model) => {
+  console.log('➕ Main: Adding external model:', model.name);
   try {
-    const newModel = externalModelManager.addModel(model);
-    return { success: true, model: newModel };
+    await externalModelManager.addModel(model);
+    console.log('✅ Main: External model added successfully');
+    return { success: true };
   } catch (error) {
-    console.error('Error adding external model:', error);
-    return { success: false };
+    console.error('❌ Main: Error adding external model:', error);
+    throw error;
   }
 });
 
-ipcMain.handle('external-models:update', async (_e, id: string, updates: any) => {
+ipcMain.handle('external-models:update', async (event, id, updates) => {
+  console.log('📝 Main: Updating external model:', id);
   try {
     const success = externalModelManager.updateModel(id, updates);
-    return { success };
+    if (success) {
+      console.log('✅ Main: External model updated successfully');
+      return { success: true };
+    } else {
+      throw new Error('Failed to update model');
+    }
   } catch (error) {
-    console.error('Error updating external model:', error);
-    return { success: false };
+    console.error('❌ Main: Error updating external model:', error);
+    throw error;
   }
 });
 
-ipcMain.handle('external-models:remove', async (_e, id: string) => {
+ipcMain.handle('external-models:remove', async (event, id) => {
+  console.log('🗑️ Main: Removing external model:', id);
   try {
-    const success = externalModelManager.removeModel(id);
-    return { success };
+    await externalModelManager.removeModel(id);
+    console.log('✅ Main: External model removed successfully');
+    return { success: true };
   } catch (error) {
-    console.error('Error removing external model:', error);
-    return { success: false };
+    console.error('❌ Main: Error removing external model:', error);
+    throw error;
   }
 });
 
-ipcMain.handle('external-models:toggle', async (_e, id: string, enabled: boolean) => {
+ipcMain.handle('external-models:toggle', async (event, id, enabled) => {
+  console.log('🔄 Main: Toggling external model:', id, 'enabled:', enabled);
   try {
     const success = externalModelManager.enableModel(id, enabled);
-    return { success };
+    if (success) {
+      console.log('✅ Main: External model toggled successfully');
+      return { success: true };
+    } else {
+      throw new Error('Failed to toggle model');
+    }
   } catch (error) {
-    console.error('Error toggling external model:', error);
-    return { success: false };
+    console.error('❌ Main: Error toggling external model:', error);
+    throw error;
   }
 });
 
-ipcMain.handle('external-models:validate-key', async (_e, provider: string, apiKey: string, endpoint?: string) => {
+ipcMain.handle('external-models:validate-key', async (event, provider, apiKey, endpoint) => {
+  console.log('🔑 Main: Validating API key for provider:', provider);
   try {
     const isValid = await externalModelManager.validateApiKey(provider, apiKey, endpoint);
-    return { success: true, valid: isValid };
+    console.log('✅ Main: API key validation completed');
+    return { valid: isValid };
   } catch (error) {
-    console.error('Error validating API key:', error);
-    return { success: false, valid: false };
+    console.error('❌ Main: Error validating API key:', error);
+    throw error;
   }
 });
+
+// Dialog handlers
+ipcMain.handle('dialog:openImage', async () => {
+  console.log('🖼️ Main: Opening image dialog...');
+  try {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      properties: ['openFile'],
+      filters: [
+        { name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'] }
+      ]
+    });
+    
+    if (result.canceled || result.filePaths.length === 0) {
+      console.log('📂 Main: Image dialog canceled');
+      return null;
+    }
+    
+    const imagePath = result.filePaths[0];
+    console.log('✅ Main: Image selected:', imagePath);
+    return imagePath;
+  } catch (error) {
+    console.error('❌ Main: Error opening image dialog:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('add-external-model', async (event, model) => {
+  console.log('➕ Main: Adding external model:', model.name);
+  try {
+    await externalModelManager.addModel(model);
+    console.log('✅ Main: External model added successfully');
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Main: Error adding external model:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('remove-external-model', async (event, modelId) => {
+  console.log('🗑️ Main: Removing external model:', modelId);
+  try {
+    await externalModelManager.removeModel(modelId);
+    console.log('✅ Main: External model removed successfully');
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Main: Error removing external model:', error);
+    throw error;
+  }
+});
+
+// Dialog handlers
+ipcMain.handle('show-open-dialog', async (event, options) => {
+  console.log('📂 Main: Opening file dialog...');
+  try {
+    const result = await dialog.showOpenDialog(mainWindow!, options);
+    console.log('✅ Main: File dialog result:', result.canceled ? 'canceled' : `${result.filePaths.length} files selected`);
+    return result;
+  } catch (error) {
+    console.error('❌ Main: Error opening file dialog:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('show-save-dialog', async (event, options) => {
+  console.log('💾 Main: Opening save dialog...');
+  try {
+    const result = await dialog.showSaveDialog(mainWindow!, options);
+    console.log('✅ Main: Save dialog result:', result.canceled ? 'canceled' : 'file path selected');
+    return result;
+  } catch (error) {
+    console.error('❌ Main: Error opening save dialog:', error);
+    throw error;
+  }
+});
+
+console.log('✅ All IPC handlers registered successfully');
+
+// App event handlers
+app.whenReady().then(async () => {
+  console.log('⚡ Electron app ready, initializing components...');
+  
+  try {
+    // Initialize MCP Manager
+    const projectRoot = path.join(__dirname, '..', '..', '..');
+    console.log('📂 Project root calculated:', projectRoot);
+    
+    await mcpManager.loadDefaultConfiguration(projectRoot);
+    console.log('✅ MCP Manager initialized successfully');
+    
+    // Initialize tool configuration
+    await toolConfigManager.loadConfig();
+    console.log('✅ Tool Configuration Manager initialized successfully');
+    
+    console.log('🎉 All components initialized, application ready!');
+  } catch (error) {
+    console.error('⚠️ Error initializing application components:', error);
+  }
+  
+  createWindow();
+});
+
+app.on('window-all-closed', () => {
+  console.log('🚪 All windows closed');
+  if (process.platform !== 'darwin') {
+    console.log('🔚 Quitting application (non-macOS)');
+    app.quit();
+  }
+});
+
+app.on('activate', () => {
+  console.log('🔄 App activated (macOS)');
+  if (BrowserWindow.getAllWindows().length === 0) {
+    console.log('📱 No windows open, creating new window');
+    createWindow();
+  }
+});
+
+console.log('🎯 Electron main process setup completed');

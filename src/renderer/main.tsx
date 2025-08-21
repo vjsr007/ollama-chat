@@ -26,6 +26,7 @@ const App: React.FC = () => {
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [availableTools, setAvailableTools] = useState<any[]>([]);
+  const [isDragOver, setIsDragOver] = useState(false);
   
   const chatRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -310,6 +311,64 @@ const App: React.FC = () => {
     if (p) setImagePath(p);
   };
 
+  // Handle file drops
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    
+    const files = Array.from(e.dataTransfer.files);
+    const imageFile = files.find(file => file.type.startsWith('image/'));
+    
+    if (imageFile) {
+      // Create a temporary object URL for preview
+      const imageUrl = URL.createObjectURL(imageFile);
+      setImagePath(imageUrl);
+      
+      // Optional: You could also convert to base64 here if needed
+      console.log('📁 Image dropped:', imageFile.name, imageFile.type);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    const hasImageFile = Array.from(e.dataTransfer.items).some(
+      item => item.type.startsWith('image/')
+    );
+    if (hasImageFile) {
+      setIsDragOver(true);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    // Only hide drag overlay if leaving the input container completely
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX;
+    const y = e.clientY;
+    
+    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+      setIsDragOver(false);
+    }
+  };
+
+  // Handle paste events for images
+  const handlePaste = async (e: React.ClipboardEvent) => {
+    const items = Array.from(e.clipboardData.items);
+    const imageItem = items.find(item => item.type.startsWith('image/'));
+    
+    if (imageItem) {
+      e.preventDefault();
+      const file = imageItem.getAsFile();
+      if (file) {
+        // Create a temporary object URL for preview
+        const imageUrl = URL.createObjectURL(file);
+        setImagePath(imageUrl);
+        
+        console.log('📋 Image pasted:', file.type);
+      }
+    }
+  };
+
   const handleToolCall = async (call: McpToolCall) => {
     try {
       setIsLoading(true);
@@ -395,7 +454,10 @@ const App: React.FC = () => {
         
         <button onClick={pickImage} aria-label="Attach image">📷 Image</button>
         {imagePath && (
-          <span className="image-chip">{imagePath.split(/\\|\//).pop()} <button onClick={() => setImagePath(undefined)} aria-label="Remove image">✕</button></span>
+          <span className="image-chip">
+            {imagePath.startsWith('blob:') ? 'Uploaded image' : imagePath.split(/\\|\//).pop()} 
+            <button onClick={() => setImagePath(undefined)} aria-label="Remove image">✕</button>
+          </span>
         )}
       </div>
       
@@ -405,7 +467,15 @@ const App: React.FC = () => {
             <div className="chat-wrapper">
               <div className="scroll-fade-top" />
               <div className="scroll-fade-bottom" />
-              <div ref={chatRef} className="chat" aria-live="polite">
+              <div 
+                ref={chatRef} 
+                className="chat" 
+                aria-live="polite"
+                onContextMenu={e => {
+                  // Allow default context menu for copy/paste in chat area
+                  e.stopPropagation();
+                }}
+              >
                 {messages.map((m,i) => (
                   <div key={i} className={`msg ${m.role}`}>
                     <span className="msg-role">{m.role}</span>
@@ -433,7 +503,20 @@ const App: React.FC = () => {
           </div>
           <div className="footer">
             <label htmlFor="chatInput" className="visually-hidden">Message</label>
-            <div className="input-container">
+            <div 
+              className={`input-container ${isDragOver ? 'drag-over' : ''}`}
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+            >
+              {isDragOver && (
+                <div className="drag-overlay">
+                  <div className="drag-overlay-content">
+                    <span className="drag-icon">📁</span>
+                    <span>Drop image here</span>
+                  </div>
+                </div>
+              )}
               <textarea 
                 id="chatInput" 
                 ref={inputRef}
@@ -451,7 +534,7 @@ const App: React.FC = () => {
                   console.log('🔄 Should show suggestions:', shouldShow);
                   setShowSuggestions(shouldShow);
                 }}
-                placeholder="Type your message (↑/↓ for history, 'use/run/execute <tool>' for suggestions)" 
+                placeholder="Type your message (↑/↓ for history, 'use/run/execute <tool>' for suggestions). Right-click for copy/paste. Drag & drop images here." 
                 onKeyDown={e => { 
                   handleKeyDown(e);
                   if (e.key === 'Enter' && !e.shiftKey && !showSuggestions) { 
@@ -459,6 +542,12 @@ const App: React.FC = () => {
                     send(); 
                   }
                 }}
+                onPaste={handlePaste}
+                onContextMenu={e => {
+                  // Allow default context menu for copy/paste
+                  e.stopPropagation();
+                }}
+                className="chat-input-textarea"
               />
               
               {/* Autocompletion suggestions */}

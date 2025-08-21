@@ -11,8 +11,8 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 button.primary { background:#3d85ff; border-color:#3d85ff; color:#fff; font-weight:600; }
 button.primary:hover:not(:disabled) { background:#5b9bff; }
 .chat-wrapper { position:relative; flex:1; display:flex; overflow:hidden; min-height:0; }
-.chat { flex:1; overflow-y:auto; border:1px solid #2d3b4d; padding:16px 18px; background:#1e2733; border-radius:14px; box-shadow:0 4px 16px -6px rgba(0,0,0,.4); scroll-behavior:smooth; }
-.msg { margin-bottom:20px; line-height:1.45; animation:fadeIn .3s ease; }
+.chat { flex:1; overflow-y:auto; border:1px solid #2d3b4d; padding:16px 18px; background:#1e2733; border-radius:14px; box-shadow:0 4px 16px -6px rgba(0,0,0,.4); scroll-behavior:smooth; -webkit-user-select: text; user-select: text; }
+.msg { margin-bottom:20px; line-height:1.45; animation:fadeIn .3s ease; -webkit-user-select: text; user-select: text; }
 .msg:last-child { margin-bottom:0; }
 .msg.user { background:#253348; padding:12px 14px 10px; border-radius:12px; border:1px solid #33455a; }
 .msg.assistant { background:#222f42; padding:12px 14px 10px; border-radius:12px; border:1px solid #2f4054; }
@@ -808,6 +808,49 @@ textarea::placeholder { color:#667386; }
   position: relative;
   flex: 1;
   min-width: 0; /* Importante para que flex funcione correctamente */
+}
+
+/* Estilos para drag & drop */
+.input-container.drag-over {
+  background: rgba(102, 126, 234, 0.1);
+  border-radius: 12px;
+  transition: background 0.2s ease;
+}
+
+.drag-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(102, 126, 234, 0.2);
+  border: 2px dashed rgba(102, 126, 234, 0.6);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+  pointer-events: none;
+}
+
+.drag-overlay-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: 500;
+}
+
+.drag-icon {
+  font-size: 24px;
+}
+
+/* Estilos mejorados para el textarea */
+.chat-input-textarea {
+  -webkit-user-select: text !important;
+  user-select: text !important;
+  resize: vertical;
 }
 
 .suggestions-dropdown {

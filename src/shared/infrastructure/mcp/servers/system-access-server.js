@@ -118,8 +118,8 @@ class SystemAccessServer {
               },
               timeout: {
                 type: 'number',
-                description: 'Timeout in milliseconds (default: 30000)',
-                default: 30000
+                description: 'Timeout in milliseconds (default: 300000)',
+                default: 300000
               }
             },
             required: ['command']
@@ -325,7 +325,7 @@ class SystemAccessServer {
     }
   }
 
-  async executeCommand(command, cwd, timeout = 30000) {
+  async executeCommand(command, cwd, timeout = 300000) {
     try {
       const options = { timeout };
       if (cwd) options.cwd = cwd;

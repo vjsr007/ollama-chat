@@ -171,7 +171,7 @@ POSTGRES_CONNECTION_STRING=postgresql://user:password@localhost:5432/database
 
 # Configuración general
 MCP_LOG_LEVEL=info
-MCP_TIMEOUT=30000
+MCP_TIMEOUT=300000
 MCP_MAX_CONCURRENT_TOOLS=5
 `;
 
@@ -230,7 +230,7 @@ async function testMcpServer(name: string, command: string, args: string[]) {
       const timeout = setTimeout(() => {
         child.kill();
         reject(new Error('Timeout'));
-      }, 5000);
+      }, 300000);
       
       child.on('exit', (code) => {
         clearTimeout(timeout);

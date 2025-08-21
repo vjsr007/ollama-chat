@@ -36,7 +36,7 @@ server.setToolRequestHandlers({
   },
 
   execute_with_assistance: async (request) => {
-    const { command, working_directory = process.cwd(), timeout = 30 } = request.params.arguments;
+    const { command, working_directory = process.cwd(), timeout = 300 } = request.params.arguments;
     
     return new Promise((resolve) => {
       const childProcess = spawn('powershell', ['-Command', command], {

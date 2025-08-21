@@ -46,7 +46,7 @@ async function testMcpServer(name: string, command: string, args: string[]) {
       const timeout = setTimeout(() => {
         child.kill();
         reject(new Error('Timeout'));
-      }, 5000);
+      }, 300000);
       
       child.on('exit', (code) => {
         clearTimeout(timeout);

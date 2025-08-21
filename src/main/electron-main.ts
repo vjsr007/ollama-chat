@@ -105,13 +105,21 @@ ipcMain.handle('chat:send', async (_e, req: ChatRequest) => {
   console.log('📝 Main: Request model:', req.model);
   console.log('📝 Main: Request messages count:', req.messages.length);
   
-  // Check if this is an external model
-  if (req.model.includes(':')) {
+  // Check if this is an external model (format: "provider:name (actual_model)")
+  // Ollama models use format like "qwen2.5:latest" while external models use "openai:GPT-4 (gpt-4)"
+  const isExternalModelFormat = req.model.includes(':') && req.model.includes('(') && req.model.includes(')');
+  
+  if (isExternalModelFormat) {
     try {
+      console.log('🔍 Main: Attempting to parse external model format:', req.model);
+      
       // Parse external model format: "provider:name (actual_model)"
       const match = req.model.match(/^([^:]+):(.+?) \(([^)]+)\)$/);
+      console.log('🔍 Main: Regex match result:', match);
+      
       if (match) {
         const [, provider, name, actualModel] = match;
+        console.log('🔍 Main: Parsed components:', { provider, name, actualModel });
         
         // Find the external model
         const externalModels = externalModelManager.getEnabledModels();

@@ -22,6 +22,7 @@ interface ModelManagerProps {
 const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
   const [externalModels, setExternalModels] = useState<ExternalModel[]>([]);
   const [showAddModel, setShowAddModel] = useState(false);
+  const [editingModel, setEditingModel] = useState<ExternalModel | null>(null);
   const [newModel, setNewModel] = useState<Partial<ExternalModel>>({
     provider: 'openai',
     enabled: true,
@@ -151,6 +152,73 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
     }
   };
 
+  const startEditModel = (model: ExternalModel) => {
+    setEditingModel(model);
+    setNewModel({
+      name: model.name,
+      provider: model.provider,
+      model: model.model,
+      apiKey: model.apiKey,
+      endpoint: model.endpoint,
+      enabled: model.enabled,
+      description: model.description,
+      maxTokens: model.maxTokens,
+      temperature: model.temperature
+    });
+    setShowAddModel(true);
+  };
+
+  const saveEditedModel = async () => {
+    if (!editingModel || !newModel.name || !newModel.model || !newModel.provider) {
+      alert('Por favor completa todos los campos obligatorios');
+      return;
+    }
+
+    try {
+      const modelToUpdate = {
+        name: newModel.name!,
+        provider: newModel.provider!,
+        model: newModel.model!,
+        apiKey: newModel.apiKey,
+        endpoint: newModel.endpoint,
+        enabled: newModel.enabled ?? true,
+        description: newModel.description,
+        maxTokens: newModel.maxTokens,
+        temperature: newModel.temperature
+      };
+
+      const response = await (window as any).externalModels?.update(editingModel.id, modelToUpdate);
+      if (response && response.success) {
+        await loadExternalModels(); // Recargar la lista
+        
+        setNewModel({
+          provider: 'openai',
+          enabled: true,
+          temperature: 0.7,
+          maxTokens: 4096
+        });
+        setShowAddModel(false);
+        setEditingModel(null);
+      } else {
+        alert('Error actualizando el modelo');
+      }
+    } catch (error) {
+      console.error('Error updating model:', error);
+      alert('Error actualizando el modelo');
+    }
+  };
+
+  const cancelEdit = () => {
+    setEditingModel(null);
+    setNewModel({
+      provider: 'openai',
+      enabled: true,
+      temperature: 0.7,
+      maxTokens: 4096
+    });
+    setShowAddModel(false);
+  };
+
   const getProviderIcon = (provider: string) => {
     switch (provider) {
       case 'openai': return '🤖';
@@ -259,6 +327,13 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
                         {model.enabled ? '👁️' : '🚫'}
                       </button>
                       <button
+                        onClick={() => startEditModel(model)}
+                        className="edit-btn"
+                        title="Editar modelo"
+                      >
+                        ✏️
+                      </button>
+                      <button
                         onClick={() => removeModel(model.id)}
                         className="remove-btn"
                         title="Eliminar modelo"
@@ -304,10 +379,10 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
             </div>
           </div>
 
-          {/* Formulario para agregar modelo */}
+          {/* Formulario para agregar/editar modelo */}
           {showAddModel && (
             <div className="add-model-form">
-              <h3>➕ Agregar Nuevo Modelo</h3>
+              <h3>{editingModel ? '✏️ Editar Modelo' : '➕ Agregar Nuevo Modelo'}</h3>
               
               <div className="form-row">
                 <div className="form-group">
@@ -398,10 +473,13 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
               </div>
 
               <div className="form-actions">
-                <button onClick={addModel} className="save-btn">
-                  💾 Guardar Modelo
+                <button 
+                  onClick={editingModel ? saveEditedModel : addModel} 
+                  className="save-btn"
+                >
+                  {editingModel ? '💾 Actualizar Modelo' : '💾 Guardar Modelo'}
                 </button>
-                <button onClick={() => setShowAddModel(false)} className="cancel-btn">
+                <button onClick={editingModel ? cancelEdit : () => setShowAddModel(false)} className="cancel-btn">
                   ❌ Cancelar
                 </button>
               </div>

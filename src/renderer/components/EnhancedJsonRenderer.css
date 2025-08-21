@@ -1,0 +1,211 @@
+.enhanced-json-renderer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+.text-block {
+  background: transparent;
+}
+
+.text-content {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font-family: inherit;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.json-block {
+  background: var(--secondary-background, #252525);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 8px;
+  overflow: hidden;
+  margin: 8px 0;
+}
+
+.json-block-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.85rem;
+}
+
+.json-toggle-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 500;
+  transition: background 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.json-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.json-size-info {
+  opacity: 0.8;
+  font-size: 0.75rem;
+  font-style: italic;
+}
+
+.json-tree-view {
+  background: var(--background-color, #1a1a1a);
+  padding: 16px;
+  border-top: 1px solid var(--border-color, #333);
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.json-code-view {
+  border-top: 1px solid var(--border-color, #333);
+}
+
+.json-code-view pre {
+  margin: 0;
+  padding: 16px;
+  background: var(--code-background, #1e1e1e);
+  color: var(--code-color, #f8f8f2);
+  overflow-x: auto;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.code-block {
+  margin: 8px 0;
+  background: var(--code-background, #1e1e1e);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.code-block pre {
+  margin: 0;
+  padding: 16px;
+  background: transparent;
+  color: var(--code-color, #f8f8f2);
+  overflow-x: auto;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+/* JSON Syntax Highlighting in Code Blocks */
+.json-code-view .hljs-attr {
+  color: #f92672;
+}
+
+.json-code-view .hljs-string {
+  color: #a6e22e;
+}
+
+.json-code-view .hljs-number {
+  color: #ae81ff;
+}
+
+.json-code-view .hljs-literal {
+  color: #66d9ef;
+}
+
+.json-code-view .hljs-punctuation {
+  color: #f8f8f2;
+}
+
+/* Enhanced scrollbar for JSON content */
+.json-tree-view::-webkit-scrollbar,
+.json-code-view::-webkit-scrollbar {
+  width: 8px;
+}
+
+.json-tree-view::-webkit-scrollbar-track,
+.json-code-view::-webkit-scrollbar-track {
+  background: var(--background-color, #1a1a1a);
+}
+
+.json-tree-view::-webkit-scrollbar-thumb,
+.json-code-view::-webkit-scrollbar-thumb {
+  background: var(--border-color, #333);
+  border-radius: 4px;
+}
+
+.json-tree-view::-webkit-scrollbar-thumb:hover,
+.json-code-view::-webkit-scrollbar-thumb:hover {
+  background: var(--primary-color, #007acc);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .json-block-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  
+  .json-toggle-btn {
+    font-size: 0.75rem;
+    padding: 3px 6px;
+  }
+  
+  .json-size-info {
+    font-size: 0.7rem;
+  }
+  
+  .json-tree-view,
+  .json-code-view pre,
+  .code-block pre {
+    padding: 12px;
+    font-size: 0.8rem;
+  }
+}
+
+/* Animation for smooth transitions */
+.json-tree-view,
+.json-code-view {
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Error handling styles */
+.json-error {
+  background: var(--error-background, #2d1b1b);
+  border: 1px solid var(--error-color, #ef4444);
+  color: var(--error-color, #ef4444);
+  padding: 12px;
+  border-radius: 6px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.85rem;
+}
+
+.json-error-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.json-error-message {
+  opacity: 0.8;
+}

@@ -48,6 +48,29 @@
   margin-left: 2px;
 }
 
+/* Indicador visual para campos requeridos */
+.argument-editor.required {
+  border-left: 3px solid #ef4444;
+}
+
+.required-badge {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.required-indicator {
+  color: #ef4444;
+  font-weight: bold;
+  margin-left: 4px;
+  font-size: 16px;
+}
+
 .arg-controls {
   display: flex;
   gap: 4px;
@@ -238,4 +261,28 @@
     font-size: 12px;
     padding: 6px 8px;
   }
+}
+
+/* Estilos adicionales para campos requeridos */
+.arg-required-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 8px 0;
+  font-size: 11px;
+}
+
+.required-text {
+  color: #fca5a5;
+  font-style: italic;
+}
+
+/* Mejora visual para argumentos con errores */
+.argument-editor.has-error {
+  border-color: rgba(239, 68, 68, 0.5);
+  background: rgba(239, 68, 68, 0.05);
+}
+
+.argument-editor.has-error .arg-label {
+  color: #fca5a5;
 }

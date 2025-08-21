@@ -2,9 +2,93 @@
 
 A modern, feature-rich chat application built with Electron, React, and TypeScript that integrates with Ollama for local AI inference and Model Context Protocol (MCP) for extended functionality.
 
+![Ollama Chat Banner](./docs/images/banner.png)
+
+## 📸 Screenshots
+
+### Main Chat Interface
+![Main Chat Interface](./docs/images/main-interface.png)
+*The main chat interface showing conversation with an AI model and tool usage*
+
+### Tool Management
+![Tool Management](./docs/images/tools-tab.png)
+*Tool management interface where you can configure and monitor MCP tools*
+
+### Model Configuration
+![Model Configuration](./docs/images/model-config.png)
+*Model selection and configuration interface with external model support*
+
+### Web Automation Example
+![Web Automation](./docs/images/web-automation.png)
+*Example of web automation using Puppeteer tools for screenshot capture*
+
+## 🎥 Video Demo
+
+📹 **[Watch the Complete Navigation Guide](./docs/videos/navigation-demo.mp4)**
+
+*A comprehensive video demonstrating:*
+- Initial setup and installation
+- Basic chat functionality
+- Tool integration and usage
+- Advanced features walkthrough
+- Troubleshooting common issues
+
+### Creating Your Own Demo Video
+
+To create a navigation demo video for this application:
+
+1. **Recording Setup**
+   - Use screen recording software (OBS Studio, Camtasia, or built-in tools)
+   - Set recording resolution to 1920x1080 for clarity
+   - Ensure good audio quality for narration
+
+2. **Demo Script Structure**
+   ```
+   1. Introduction (30s)
+      - Welcome and app overview
+      - Key features highlight
+   
+   2. Installation & Setup (2-3 min)
+      - Prerequisites installation
+      - App installation process
+      - First-time configuration
+   
+   3. Basic Features (3-4 min)
+      - Chat interface tour
+      - Model selection
+      - System prompts
+      - Image upload
+   
+   4. MCP Tools (4-5 min)
+      - Tools tab overview
+      - Filesystem operations
+      - Web automation examples
+      - GitHub integration
+   
+   5. Advanced Features (2-3 min)
+      - External model configuration
+      - Tool management
+      - Settings and customization
+   
+   6. Troubleshooting (1-2 min)
+      - Common issues and solutions
+      - Where to get help
+   
+   7. Conclusion (30s)
+      - Summary and next steps
+   ```
+
+3. **Recording Tips**
+   - Speak clearly and at a moderate pace
+   - Use cursor highlighting to guide attention
+   - Include actual examples and use cases
+   - Show both successful operations and error handling
+   - Keep segments focused and concise
+
 ## 🚀 Features
 
 ### Core Features
+
 - **Local AI Chat**: Chat with Ollama models running locally on your machine
 - **Modern UI**: Clean, responsive interface with tabs for chat and tools
 - **Image Support**: Upload and analyze images with vision-capable models
@@ -12,6 +96,7 @@ A modern, feature-rich chat application built with Electron, React, and TypeScri
 - **System Prompts**: Customize AI behavior with custom system prompts
 
 ### MCP Integration
+
 - **Filesystem Tools**: Read, write, and navigate files and directories
 - **GitHub Integration**: Search repositories, manage issues, create PRs
 - **Web Automation**: Use Puppeteer for web scraping and automation
@@ -19,11 +104,51 @@ A modern, feature-rich chat application built with Electron, React, and TypeScri
 - **Search Capabilities**: Web search integration (with API key)
 
 ### Developer Experience
+
 - **TypeScript**: Full type safety throughout the application
 - **Clean Architecture**: Domain-driven design with clear separation of concerns
 - **Hot Reload**: Development server with instant updates
 - **Testing Ready**: Jest configuration for unit testing
 - **Linting**: ESLint and Prettier for code quality
+
+## 📸 Taking Screenshots for Documentation
+
+To capture screenshots for this README:
+
+### Required Screenshots
+
+1. **Main Interface** (`main-interface.png`)
+   - Start the app with `npm start`
+   - Open a chat with an AI model
+   - Show a conversation with tool usage
+   - Include the full window with tabs visible
+
+2. **Tool Management** (`tools-tab.png`)
+   - Click on the "Tools" tab
+   - Show the list of available tools
+   - Include enabled/disabled status
+   - Capture tool categories and descriptions
+
+3. **Model Configuration** (`model-config.png`)
+   - Click on "Models" tab
+   - Show model selection dropdown
+   - Include any external models if configured
+   - Show system prompt area
+
+4. **Web Automation Example** (`web-automation.png`)
+   - Run a Puppeteer command like "take a screenshot of google.com"
+   - Show the command execution
+   - Include the resulting screenshot or output
+   - Capture the full conversation flow
+
+### Screenshot Guidelines
+
+- **Resolution**: Capture at least 1920x1080
+- **Format**: Save as PNG for best quality
+- **Content**: Include relevant UI elements and text
+- **Privacy**: Blur any personal information
+- **Lighting**: Use dark/light mode consistently
+- **File Size**: Optimize images to keep under 500KB each
 
 ## 🛠️ Technology Stack
 
@@ -228,12 +353,41 @@ npm run mcp:setup    # Install MCP servers
 
 ## 🤝 Contributing
 
+### Code Contributions
+
 1. Fork the repository
 2. Create a feature branch: `git checkout -b feature/new-feature`
 3. Make your changes and test thoroughly
 4. Run linting and tests: `npm run lint && npm test`
 5. Commit with clear messages: `git commit -m "feat: add new feature"`
 6. Push and create a Pull Request
+
+### Documentation Contributions
+
+#### Screenshots
+To contribute or update screenshots:
+
+1. Follow the [Screenshot Guide](./docs/SCREENSHOT_GUIDE.md)
+2. Capture high-quality images as specified
+3. Optimize images to under 500KB each
+4. Place in `docs/images/` directory
+5. Update README links accordingly
+
+#### Video Demo
+To create or update the navigation video:
+
+1. Follow the [Video Creation Guide](./docs/VIDEO_GUIDE.md)
+2. Record in 1080p with clear audio
+3. Keep video under 15 minutes total length
+4. Place in `docs/videos/` directory
+5. Consider uploading to YouTube for large files
+
+#### Documentation Standards
+- Use clear, concise language
+- Include practical examples
+- Test all provided code samples
+- Maintain consistent formatting
+- Update both README and relevant guides
 
 ## 📄 License
 

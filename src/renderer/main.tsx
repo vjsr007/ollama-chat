@@ -20,7 +20,15 @@ const App: React.FC = () => {
   const [isToolManagerOpen, setIsToolManagerOpen] = useState(false);
   const [isModelManagerOpen, setIsModelManagerOpen] = useState(false);
   const [toolsStatus, setToolsStatus] = useState<{ enabled: number; total: number; limit: number } | null>(null);
+  
+  // States for history and autocompletion
+  const [promptHistory, setPromptHistory] = useState<string[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [availableTools, setAvailableTools] = useState<any[]>([]);
+  
   const chatRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     if (chatRef.current) {
@@ -30,9 +38,50 @@ const App: React.FC = () => {
 
   useEffect(() => {
     window.ollama.listModels().then(ms => { setModels(ms); if (ms[0]) setModel(ms[0]); });
+    
+    // Load prompt history from localStorage
+    const savedHistory = localStorage.getItem('ollama-chat-prompt-history');
+    if (savedHistory) {
+      try {
+        const parsedHistory = JSON.parse(savedHistory);
+        setPromptHistory(parsedHistory);
+        console.log('📚 Loaded prompt history:', parsedHistory.length, 'items');
+      } catch (error) {
+        console.error('Error loading prompt history:', error);
+      }
+    } else {
+      console.log('📚 No prompt history found in localStorage');
+    }
+    
+    // Load available tools for autocompletion
+    loadAvailableTools();
   }, []);
 
-  // Cargar estado de herramientas cuando cambie el modelo
+  // Reload tools when activeTab changes to ensure fresh data
+  useEffect(() => {
+    if (activeTab === 'chat') {
+      loadAvailableTools();
+    }
+  }, [activeTab]);
+
+  const loadAvailableTools = async () => {
+    try {
+      const toolsResponse = await (window as any).mcp?.getTools();
+      if (toolsResponse && toolsResponse.tools) {
+        setAvailableTools(toolsResponse.tools);
+        console.log('🛠️ Loaded available tools:', toolsResponse.tools.length);
+      } else if (toolsResponse && Array.isArray(toolsResponse)) {
+        setAvailableTools(toolsResponse);
+        console.log('🛠️ Loaded available tools (array):', toolsResponse.length);
+      } else {
+        console.warn('🛠️ No tools found in response:', toolsResponse);
+      }
+    } catch (error) {
+      console.error('Error loading available tools:', error);
+    }
+  };
+
+  // Load tool status when model changes
   useEffect(() => {
     if (model) {
       loadToolsStatus();
@@ -41,13 +90,13 @@ const App: React.FC = () => {
 
   const loadToolsStatus = async () => {
     try {
-      // Obtener todas las herramientas disponibles
+      // Get all available tools
       const toolsResponse = await (window as any).electronAPI?.getAvailableTools();
       if (toolsResponse && toolsResponse.success) {
         const allTools = toolsResponse.tools;
         const enabledTools = allTools.filter((tool: any) => tool.enabled);
         
-        // Obtener límites del modelo
+        // Get model limits
         const limitsResponse = await (window as any).electronAPI?.getModelLimits();
         const modelLimit = limitsResponse?.success 
           ? (limitsResponse.limits[model] || limitsResponse.limits['default'] || 25)
@@ -64,8 +113,155 @@ const App: React.FC = () => {
     }
   };
 
+  // Functions to handle prompt history
+  const addToHistory = (prompt: string) => {
+    if (!prompt.trim()) return;
+    
+    const newHistory = [prompt, ...promptHistory.filter(p => p !== prompt)].slice(0, 50); // Keep last 50
+    setPromptHistory(newHistory);
+    localStorage.setItem('ollama-chat-prompt-history', JSON.stringify(newHistory));
+    setHistoryIndex(-1);
+    
+    console.log('📝 Prompt added to history:', prompt);
+    console.log('📚 History length:', newHistory.length);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // If suggestions are visible, handle them first
+    if (showSuggestions) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowSuggestions(false);
+        return;
+      }
+      // Don't process other keys if suggestions are visible
+      return;
+    }
+    
+    // Handle history navigation only if no suggestions
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (promptHistory.length > 0 && historyIndex < promptHistory.length - 1) {
+        const newIndex = historyIndex + 1;
+        setHistoryIndex(newIndex);
+        setInput(promptHistory[newIndex]);
+      }
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (historyIndex > 0) {
+        const newIndex = historyIndex - 1;
+        setHistoryIndex(newIndex);
+        setInput(promptHistory[newIndex]);
+      } else if (historyIndex === 0) {
+        setHistoryIndex(-1);
+        setInput('');
+      }
+    } else if (e.key === 'Escape') {
+      setShowSuggestions(false);
+      setHistoryIndex(-1);
+    }
+  };
+
+  const getToolSuggestions = () => {
+    const text = input.toLowerCase();
+    
+    // Check if contains keywords for tools (even without space after)
+    const hasUse = text.includes('use');
+    const hasRun = text.includes('run');
+    const hasExecute = text.includes('execute');
+    
+    if (!hasUse && !hasRun && !hasExecute) {
+      return [];
+    }
+    
+    console.log('🔍 Looking for tool suggestions, input:', input);
+    console.log('🔍 Available tools count:', availableTools.length);
+    
+    // Get the word after the keyword
+    let searchTerm = '';
+    const useIndex = text.lastIndexOf('use');
+    const runIndex = text.lastIndexOf('run');
+    const executeIndex = text.lastIndexOf('execute');
+    
+    const maxIndex = Math.max(
+      hasUse ? useIndex : -1,
+      hasRun ? runIndex : -1, 
+      hasExecute ? executeIndex : -1
+    );
+    
+    if (maxIndex >= 0) {
+      // Determine which command was used
+      const command = hasExecute && executeIndex === maxIndex ? 'execute' :
+                     hasUse && useIndex === maxIndex ? 'use' :
+                     hasRun && runIndex === maxIndex ? 'run' : '';
+      
+      if (command) {
+        const afterCommand = input.slice(maxIndex + command.length).trim();
+        searchTerm = afterCommand;
+      }
+    }
+    
+    console.log('🔍 Search term:', searchTerm);
+    
+    if (searchTerm === '') {
+      const result = availableTools.slice(0, 5); // Show first 5 tools if no search term
+      console.log('🔍 Returning first 5 tools:', result.length);
+      return result;
+    }
+    
+    const filtered = availableTools.filter(tool => 
+      tool.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      tool.description?.toLowerCase().includes(searchTerm.toLowerCase())
+    ).slice(0, 5);
+    
+    console.log('🔍 Filtered tools:', filtered.length);
+    return filtered;
+  };
+
+  const insertToolSuggestion = (tool: any) => {
+    const text = input;
+    const lowerText = text.toLowerCase();
+    
+    const useIndex = lowerText.lastIndexOf('use');
+    const runIndex = lowerText.lastIndexOf('run');
+    const executeIndex = lowerText.lastIndexOf('execute');
+    
+    const maxIndex = Math.max(useIndex, runIndex, executeIndex);
+    if (maxIndex >= 0) {
+      // Determine which command was used
+      const command = executeIndex === maxIndex ? 'execute' :
+                     useIndex === maxIndex ? 'use' :
+                     runIndex === maxIndex ? 'run' : '';
+      
+      if (command) {
+        // Replace from command to end
+        const beforeCommand = text.slice(0, maxIndex);
+        let newText = beforeCommand + command + ' ' + tool.name;
+        
+        // If tool has required parameters, add placeholder
+        if (tool.inputSchema?.properties && Object.keys(tool.inputSchema.properties).length > 0) {
+          const requiredParams = Object.entries(tool.inputSchema.properties)
+            .filter(([_, def]: [string, any]) => def.required)
+            .map(([key, _]) => key);
+          
+          if (requiredParams.length > 0) {
+            newText += ` {${requiredParams.join(', ')}}`;
+          }
+        }
+        
+        setInput(newText);
+      }
+    }
+    
+    setShowSuggestions(false);
+    inputRef.current?.focus();
+  };
+
   const send = async () => {
     if (!input.trim() || !model) return;
+    
+    // Add to history
+    addToHistory(input.trim());
     const baseMessages = messages.length === 0 && systemPrompt.trim()
       ? [{ role: 'system', content: systemPrompt } as ChatMessage, ...messages]
       : messages;
@@ -155,16 +351,26 @@ const App: React.FC = () => {
           <button 
             className="tab-btn tool-manager-btn"
             onClick={() => setIsToolManagerOpen(true)}
-            title="Gestionar herramientas disponibles para el modelo"
+            title="Manage available tools for the model"
           >
-            ⚙️ Configurar
+            ⚙️ Configure
           </button>
           <button 
             className="tab-btn model-manager-btn"
             onClick={() => setIsModelManagerOpen(true)}
-            title="Gestionar modelos externos (OpenAI, Anthropic, GitHub Copilot)"
+            title="Manage external models (OpenAI, Anthropic, GitHub Copilot)"
           >
-            🌐 Modelos
+            🌐 Models
+          </button>
+          <button 
+            className="tab-btn"
+            onClick={() => {
+              loadAvailableTools();
+              loadToolsStatus();
+            }}
+            title="Refresh tools and status"
+          >
+            🔄 Refresh
           </button>
         </div>
         <div className="actions">
@@ -177,12 +383,12 @@ const App: React.FC = () => {
           {models.map(m => <option key={m} value={m}>{m}</option>)}
         </select>
         
-        {/* Indicador de estado de herramientas */}
+        {/* Tool status indicator */}
         {toolsStatus && (
-          <div className="tools-status" title={`${toolsStatus.enabled} herramientas habilitadas de ${toolsStatus.total} disponibles (límite: ${toolsStatus.limit})`}>
+          <div className="tools-status" title={`${toolsStatus.enabled} tools enabled of ${toolsStatus.total} available (limit: ${toolsStatus.limit})`}>
             🛠️ {toolsStatus.enabled}/{toolsStatus.total}
             {toolsStatus.enabled > toolsStatus.limit && (
-              <span className="warning-indicator" title="Excede el límite del modelo">⚠️</span>
+              <span className="warning-indicator" title="Exceeds model limit">⚠️</span>
             )}
           </div>
         )}
@@ -227,7 +433,55 @@ const App: React.FC = () => {
           </div>
           <div className="footer">
             <label htmlFor="chatInput" className="visually-hidden">Message</label>
-            <textarea id="chatInput" value={input} onChange={e => setInput(e.target.value)} placeholder="Type your message" onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }} />
+            <div className="input-container">
+              <textarea 
+                id="chatInput" 
+                ref={inputRef}
+                value={input} 
+                onChange={e => {
+                  const newValue = e.target.value;
+                  setInput(newValue);
+                  setHistoryIndex(-1); // Reset history index when typing
+                  
+                  // Show tool suggestions if user is typing commands
+                  const suggestions = getToolSuggestions();
+                  const shouldShow = suggestions.length > 0 && newValue.trim().length > 0;
+                  console.log('🔄 Input changed:', newValue);
+                  console.log('🔄 Suggestions found:', suggestions.length);
+                  console.log('🔄 Should show suggestions:', shouldShow);
+                  setShowSuggestions(shouldShow);
+                }}
+                placeholder="Type your message (↑/↓ for history, 'use/run/execute <tool>' for suggestions)" 
+                onKeyDown={e => { 
+                  handleKeyDown(e);
+                  if (e.key === 'Enter' && !e.shiftKey && !showSuggestions) { 
+                    e.preventDefault(); 
+                    send(); 
+                  }
+                }}
+              />
+              
+              {/* Autocompletion suggestions */}
+              {showSuggestions && (
+                <div className="suggestions-dropdown">
+                  {getToolSuggestions().map((tool, index) => (
+                    <div 
+                      key={tool.name}
+                      className="suggestion-item"
+                      onClick={() => insertToolSuggestion(tool)}
+                    >
+                      <div className="suggestion-name">🛠️ {tool.name}</div>
+                      <div className="suggestion-description">{tool.description}</div>
+                      {tool.inputSchema?.properties && (
+                        <div className="suggestion-params">
+                          Params: {Object.keys(tool.inputSchema.properties).join(', ')}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
             <button className="primary send-button" onClick={send} disabled={isLoading || !input.trim()}>{isLoading ? 'Generating…' : 'Send'}</button>
           </div>
         </>
@@ -243,14 +497,18 @@ const App: React.FC = () => {
         isOpen={isToolManagerOpen}
         onClose={() => {
           setIsToolManagerOpen(false);
-          loadToolsStatus(); // Recargar estado después de cerrar
+          loadToolsStatus(); // Reload status after closing
+          loadAvailableTools(); // Reload tools for autocompletion
         }}
         currentModel={model}
       />
       
       <ModelManager 
         isOpen={isModelManagerOpen}
-        onClose={() => setIsModelManagerOpen(false)}
+        onClose={() => {
+          setIsModelManagerOpen(false);
+          loadAvailableTools(); // Reload tools when model manager closes
+        }}
       />
     </div>
   );

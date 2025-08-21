@@ -44,6 +44,13 @@ export const McpTools: React.FC<McpToolsProps> = ({ onToolCall }) => {
   const [selectedTool, setSelectedTool] = useState<string>('');
   const [toolArgs, setToolArgs] = useState<Record<string, any>>({});
   const [showAddServer, setShowAddServer] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [isExecuting, setIsExecuting] = useState(false);
+  
+  // Estados para historial y sugerencias de tools
+  const [toolHistory, setToolHistory] = useState<McpToolCall[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+  
   const [newServer, setNewServer] = useState({
     name: '',
     type: 'stdio' as const,
@@ -55,7 +62,19 @@ export const McpTools: React.FC<McpToolsProps> = ({ onToolCall }) => {
   useEffect(() => {
     loadTools();
     loadServers();
+    loadToolHistory();
   }, []);
+
+  const loadToolHistory = () => {
+    try {
+      const savedHistory = localStorage.getItem('ollama-chat-tool-history');
+      if (savedHistory) {
+        setToolHistory(JSON.parse(savedHistory));
+      }
+    } catch (error) {
+      console.error('Error loading tool history:', error);
+    }
+  };
 
   const loadTools = async () => {
     try {
@@ -75,19 +94,106 @@ export const McpTools: React.FC<McpToolsProps> = ({ onToolCall }) => {
     }
   };
 
+  // Validar argumentos antes de ejecutar la herramienta
+  const validateArguments = (tool: McpTool): { isValid: boolean; errors: Record<string, string> } => {
+    const errors: Record<string, string> = {};
+    
+    // Verificar que el tool tenga schema válido
+    if (!tool.schema || typeof tool.schema !== 'object') {
+      return { isValid: true, errors: {} }; // Si no hay schema, no hay que validar
+    }
+    
+    for (const [argName, argDef] of Object.entries(tool.schema)) {
+      const value = toolArgs[argName];
+      
+      // Verificar argumentos requeridos
+      if (argDef.required && (value === undefined || value === null || value === '')) {
+        errors[argName] = `${argName} es requerido`;
+        continue;
+      }
+      
+      // Validar tipo si hay valor
+      if (value !== undefined && value !== null && value !== '') {
+        switch (argDef.type) {
+          case 'number':
+            if (isNaN(Number(value))) {
+              errors[argName] = `${argName} debe ser un número`;
+            }
+            break;
+          case 'boolean':
+            if (typeof value !== 'boolean' && value !== 'true' && value !== 'false') {
+              errors[argName] = `${argName} debe ser verdadero o falso`;
+            }
+            break;
+          case 'array':
+            if (!Array.isArray(value)) {
+              errors[argName] = `${argName} debe ser una lista`;
+            }
+            break;
+          case 'object':
+            if (typeof value !== 'object' || Array.isArray(value)) {
+              errors[argName] = `${argName} debe ser un objeto`;
+            }
+            break;
+        }
+      }
+    }
+    
+    return {
+      isValid: Object.keys(errors).length === 0,
+      errors
+    };
+  };
+
   const handleToolCall = async () => {
     if (!selectedTool) return;
     
     const tool = tools.find(t => t.name === selectedTool);
     if (!tool) return;
 
-    const serverId = tool.origin === 'builtin' ? undefined : servers.find(s => s.status === 'ready')?.id;
+    // Validar argumentos
+    const validation = validateArguments(tool);
+    setValidationErrors(validation.errors);
     
-    onToolCall({
-      tool: selectedTool,
-      args: toolArgs,
-      serverId
-    });
+    if (!validation.isValid) {
+      return; // No ejecutar si hay errores de validación
+    }
+
+    setIsExecuting(true);
+    
+    try {
+      const serverId = tool.origin === 'builtin' ? undefined : servers.find(s => s.status === 'ready')?.id;
+      
+      const toolCall: McpToolCall = {
+        tool: selectedTool,
+        args: toolArgs,
+        serverId
+      };
+      
+      // Agregar al historial
+      addToToolHistory(toolCall);
+      
+      onToolCall(toolCall);
+    } catch (error) {
+      console.error('Error executing tool:', error);
+    } finally {
+      setIsExecuting(false);
+    }
+  };
+
+  const addToToolHistory = (toolCall: McpToolCall) => {
+    const newHistory = [toolCall, ...toolHistory.filter(h => 
+      !(h.tool === toolCall.tool && JSON.stringify(h.args) === JSON.stringify(toolCall.args))
+    )].slice(0, 20); // Mantener últimas 20 ejecuciones
+    
+    setToolHistory(newHistory);
+    localStorage.setItem('ollama-chat-tool-history', JSON.stringify(newHistory));
+  };
+
+  const loadFromHistory = (historyItem: McpToolCall) => {
+    setSelectedTool(historyItem.tool);
+    setToolArgs(historyItem.args);
+    setShowHistory(false);
   };
 
   const addServer = async () => {
@@ -134,7 +240,10 @@ export const McpTools: React.FC<McpToolsProps> = ({ onToolCall }) => {
     }
   };
 
-  const selectedToolSchema = tools.find(t => t.name === selectedTool)?.schema || {};
+  const selectedToolSchema = (() => {
+    const tool = tools.find(t => t.name === selectedTool);
+    return tool?.schema && typeof tool.schema === 'object' ? tool.schema : {};
+  })();
 
   return (
     <div className="mcp-tools">
@@ -145,22 +254,57 @@ export const McpTools: React.FC<McpToolsProps> = ({ onToolCall }) => {
         </div>
         
         <div className="tool-selection">
-          <select 
-            value={selectedTool} 
-            onChange={(e) => {
-              setSelectedTool(e.target.value);
-              setToolArgs({});
-            }}
-            className="tool-selector"
-            title="Select MCP tool"
-          >
-            <option value="">Select tool...</option>
-            {tools.map(tool => (
-              <option key={tool.name} value={tool.name}>
-                {tool.name} {tool.origin === 'builtin' ? '🔧' : '🌐'}
-              </option>
-            ))}
-          </select>
+          <div className="tool-selector-container">
+            <select 
+              value={selectedTool} 
+              onChange={(e) => {
+                setSelectedTool(e.target.value);
+                setToolArgs({});
+                setValidationErrors({});
+              }}
+              className="tool-selector"
+              title="Select MCP tool"
+            >
+              <option value="">Select tool...</option>
+              {tools.map(tool => (
+                <option key={tool.name} value={tool.name}>
+                  {tool.name} {tool.origin === 'builtin' ? '🔧' : '🌐'}
+                </option>
+              ))}
+            </select>
+            
+            <button
+              onClick={() => setShowHistory(!showHistory)}
+              className="history-btn"
+              title="Tool execution history"
+              disabled={toolHistory.length === 0}
+            >
+              📋 {toolHistory.length}
+            </button>
+          </div>
+          
+          {/* Dropdown de historial */}
+          {showHistory && toolHistory.length > 0 && (
+            <div className="history-dropdown">
+              <div className="history-header">
+                <span>Recent Tool Executions</span>
+                <button onClick={() => setShowHistory(false)} className="close-history">✕</button>
+              </div>
+              {toolHistory.map((item, index) => (
+                <div key={index} className="history-item" onClick={() => loadFromHistory(item)}>
+                  <div className="history-tool">🛠️ {item.tool}</div>
+                  <div className="history-args">
+                    {Object.keys(item.args).length > 0 
+                      ? Object.entries(item.args).map(([key, value]) => 
+                          `${key}: ${String(value).slice(0, 30)}${String(value).length > 30 ? '...' : ''}`
+                        ).join(', ')
+                      : 'No parameters'
+                    }
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {selectedTool && (
@@ -171,25 +315,55 @@ export const McpTools: React.FC<McpToolsProps> = ({ onToolCall }) => {
               </p>
             </div>
             
-            {Object.entries(selectedToolSchema).map(([argName, argDef]) => (
-              <ArgumentEditor
-                key={argName}
-                argName={argName}
-                argDef={argDef}
-                value={toolArgs[argName]}
-                onChange={(value) => setToolArgs(prev => ({
-                  ...prev,
-                  [argName]: value
-                }))}
-              />
+            {selectedToolSchema && Object.keys(selectedToolSchema).length > 0 && 
+              Object.entries(selectedToolSchema).map(([argName, argDef]) => (
+                <div key={argName} className="argument-wrapper">
+                  <ArgumentEditor
+                    argName={argName}
+                    argDef={argDef}
+                    value={toolArgs[argName]}
+                    onChange={(value) => {
+                    setToolArgs(prev => ({
+                      ...prev,
+                      [argName]: value
+                    }));
+                    // Limpiar error de validación al cambiar el valor
+                    if (validationErrors[argName]) {
+                      setValidationErrors(prev => {
+                        const newErrors = { ...prev };
+                        delete newErrors[argName];
+                        return newErrors;
+                      });
+                    }
+                  }}
+                />
+                {validationErrors[argName] && (
+                  <div className="validation-error">
+                    ⚠️ {validationErrors[argName]}
+                  </div>
+                )}
+              </div>
             ))}
+            
+            {Object.keys(validationErrors).length > 0 && (
+              <div className="validation-summary">
+                <div className="validation-summary-header">
+                  ⚠️ Errores de validación:
+                </div>
+                <ul className="validation-list">
+                  {Object.entries(validationErrors).map(([field, error]) => (
+                    <li key={field}>{error}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
             
             <button 
               onClick={handleToolCall}
-              className="btn-tool-call"
-              disabled={!selectedTool}
+              className={`btn-tool-call ${Object.keys(validationErrors).length > 0 ? 'btn-disabled' : ''}`}
+              disabled={!selectedTool || Object.keys(validationErrors).length > 0 || isExecuting}
             >
-              Execute Tool
+              {isExecuting ? '⏳ Ejecutando...' : 'Execute Tool'}
             </button>
           </div>
         )}

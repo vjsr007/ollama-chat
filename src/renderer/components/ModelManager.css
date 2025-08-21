@@ -285,6 +285,26 @@
   color: white;
 }
 
+.edit-btn {
+  background: transparent;
+  border: 1px solid var(--primary-color, #007acc);
+  color: var(--primary-color, #007acc);
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.edit-btn:hover {
+  background: var(--primary-color, #007acc);
+  color: white;
+}
+
 .predefined-providers {
   display: flex;
   flex-direction: column;

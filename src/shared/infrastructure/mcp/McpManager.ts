@@ -259,39 +259,76 @@ export class McpManager extends EventEmitter {
     if (!serverState) throw new Error(`Server ${id} not found`);
     
     const { config } = serverState;
+    console.log(`🚀 Starting MCP server: ${id}`);
+    console.log(`📋 Command: ${config.command} ${config.args?.join(' ') || ''}`);
     
     if (config.type === 'stdio') {
       if (!config.command) throw new Error('Command required for stdio server');
       
       try {
+        // Asegurar que npx esté disponible agregando rutas comunes de Node.js al PATH
+        const nodeJsPaths = [
+          'C:\\Program Files\\nodejs',
+          'C:\\Program Files (x86)\\nodejs',
+          process.env.APPDATA ? `${process.env.APPDATA}\\npm` : '',
+          process.env.USERPROFILE ? `${process.env.USERPROFILE}\\AppData\\Roaming\\npm` : ''
+        ].filter(Boolean);
+        
+        const currentPath = process.env.PATH || '';
+        const enhancedPath = [currentPath, ...nodeJsPaths].join(';');
+        
+        console.log(`🔧 Enhanced PATH to include Node.js`);
+        
         const proc = spawn(config.command, config.args || [], {
           stdio: ['pipe', 'pipe', 'pipe'],
-          env: { ...process.env, ...config.env },
-          cwd: config.cwd || this.projectRoot
+          env: { 
+            ...process.env, 
+            ...config.env,
+            PATH: enhancedPath
+          },
+          cwd: config.cwd || this.projectRoot,
+          shell: true // Use shell for better Windows compatibility
         });
+        
+        console.log(`✅ Process created for ${id}, PID: ${proc.pid}`);
         
         serverState.process = proc;
         serverState.status = 'starting';
         
         proc.stdout?.on('data', (chunk) => this.handleStdout(id, chunk));
         proc.stderr?.on('data', (data) => {
-          console.warn(`[${config.name} stderr]`, data.toString().trim());
+          console.warn(`❌ [${config.name} stderr]`, data.toString().trim());
         });
         
         proc.on('error', (err) => {
+          console.error(`💥 Error in server ${id}:`, err);
           serverState.status = 'error';
           this.emit('server-error', id, err);
         });
         
-        proc.on('exit', () => {
+        proc.on('exit', (code, signal) => {
+          console.log(`🔴 Server ${id} terminated with code ${code}, signal ${signal}`);
           serverState.status = 'stopped';
           this.emit('server-stopped', id);
         });
         
-        // Send initialize
-        await this.sendInitialize(id);
+        // Send initialize after a brief delay to let the process start
+        console.log(`🔗 Sending initialization to ${id}`);
+        setTimeout(async () => {
+          try {
+            await this.sendInitialize(id);
+            // Send initialized notification to complete handshake
+            await this.sendInitialized(id);
+            console.log(`✅ Server ${id} initialized correctly`);
+          } catch (error) {
+            console.error(`❌ Error initializing ${id}:`, error);
+            // Don't mark as error, just as stopped to allow retries
+            serverState.status = 'stopped';
+          }
+        }, 1000); // Wait 1 second for the process to be ready
         
       } catch (error) {
+        console.error(`❌ Error starting server ${id}:`, error);
         serverState.status = 'error';
         throw error;
       }
@@ -363,6 +400,30 @@ export class McpManager extends EventEmitter {
     await this.sendJsonRpcRequest(id, initMessage);
   }
 
+  private async sendInitialized(id: string): Promise<void> {
+    const serverState = this.servers.get(id);
+    if (!serverState?.process?.stdin) {
+      throw new Error(`Server ${id} not available`);
+    }
+
+    const initializedMessage = {
+      jsonrpc: '2.0',
+      method: 'notifications/initialized'
+    };
+    
+    try {
+      serverState.process.stdin.write(JSON.stringify(initializedMessage) + '\n');
+      console.log(`📡 Sent initialized message to ${id}`);
+      
+      // Mark server as ready and request tools list
+      serverState.status = 'ready';
+      await this.requestToolsList(id);
+    } catch (error) {
+      console.error(`❌ Error enviando initialized a ${id}:`, error);
+      throw error;
+    }
+  }
+
   private async requestToolsList(id: string): Promise<void> {
     try {
       const result = await this.sendJsonRpcRequest(id, {
@@ -381,7 +442,7 @@ export class McpManager extends EventEmitter {
     }
   }
 
-  private async sendJsonRpcRequest(id: string, message: any, timeoutMs = 10000): Promise<any> {
+  private async sendJsonRpcRequest(id: string, message: any, timeoutMs = 5000): Promise<any> {
     const serverState = this.servers.get(id);
     if (!serverState?.process?.stdin) {
       throw new Error(`Server ${id} not available`);
@@ -505,49 +566,126 @@ export class McpManager extends EventEmitter {
     return allTools;
   }
 
-  // Auto-configuración para entorno de desarrollo
+  // Auto-configuration for development environment
   async loadDefaultConfiguration(projectRoot: string = process.cwd()): Promise<void> {
     try {
-      // Intentar cargar configuración personalizada
-      const configPath = path.join(projectRoot, 'mcp-config-simple.json');
+      console.log('🔍 Searching for MCP configuration in:', projectRoot);
       
-      try {
-        const configContent = await fs.readFile(configPath, 'utf-8');
-        const config = JSON.parse(configContent);
-        
-        if (config.external_servers) {
-          for (const [id, serverConfig] of Object.entries(config.external_servers)) {
-            const typedConfig = serverConfig as any;
-            if (typedConfig.enabled) {
+      // Buscar archivos de configuración en orden de preferencia
+      const configFiles = [
+        'mcp-servers.json',
+        'mcp-config-simple.json',
+        'mcp-quick-config.json'
+      ];
+      
+      let configLoaded = false;
+      
+      for (const configFile of configFiles) {
+        try {
+          const configPath = path.join(projectRoot, configFile);
+          console.log('📂 Checking file:', configPath);
+          
+          const configContent = await fs.readFile(configPath, 'utf-8');
+          const config = JSON.parse(configContent);
+          console.log('✅ File found and parsed:', configFile);
+          
+          // Load servers from mcp-servers.json file
+          if (config.servers) {
+            console.log(`📋 Loading ${Object.keys(config.servers).length} MCP servers from ${configFile}`);
+            
+            for (const [id, serverConfig] of Object.entries(config.servers)) {
+              const typedConfig = serverConfig as any;
+              
+              // Create MCP server but mark as available (don't auto-start)
               const mcpServer: McpServer = {
                 id,
-                name: id,
+                name: typedConfig.description || id,
                 type: typedConfig.type || 'stdio',
                 command: typedConfig.command,
                 args: typedConfig.args,
                 status: 'stopped',
-                enabled: true
+                enabled: false, // No auto-iniciar por defecto
+                description: typedConfig.description,
+                category: typedConfig.category
               };
-              this.addServer(mcpServer);
+              
+              // Add server without starting it automatically
+              this.servers.set(id, {
+                config: mcpServer,
+                status: 'stopped',
+                tools: [],
+                buffer: '',
+                pending: new Map(),
+                nextId: 1
+              });
+              
+              console.log(`✅ MCP server "${id}" added (${typedConfig.category})`);
             }
+            
+            configLoaded = true;
+            console.log('✅ MCP configuration loaded from', configPath);
+            break;
           }
+          
+          // Load servers from other configuration formats
+          if (config.external_servers || config.working_servers) {
+            const servers = config.external_servers || config.working_servers;
+            console.log(`📋 Loading ${Object.keys(servers).length} MCP servers from ${configFile}`);
+            
+            for (const [id, serverConfig] of Object.entries(servers)) {
+              const typedConfig = serverConfig as any;
+              if (typedConfig.command) {
+                const mcpServer: McpServer = {
+                  id,
+                  name: id,
+                  type: typedConfig.type || 'stdio',
+                  command: typedConfig.command,
+                  args: typedConfig.args,
+                  status: 'stopped',
+                  enabled: typedConfig.enabled || false,
+                  description: typedConfig.description,
+                  category: typedConfig.category
+                };
+                
+                this.servers.set(id, {
+                  config: mcpServer,
+                  status: 'stopped',
+                  tools: [],
+                  buffer: '',
+                  pending: new Map(),
+                  nextId: 1
+                });
+                
+                console.log(`✅ MCP server "${id}" added`);
+              }
+            }
+            
+            configLoaded = true;
+            console.log('✅ MCP configuration loaded from', configPath);
+            break;
+          }
+          
+        } catch (error) {
+          // File doesn't exist or parsing error, continue with next
+          console.log('❌ Could not load configuration file:', configFile, error instanceof Error ? error.message : error);
+          continue;
         }
-        
-        console.log('✅ Configuración MCP cargada desde', configPath);
-      } catch (error) {
-        console.log('📝 Usando configuración MCP por defecto (built-in tools)');
+      }
+      
+      if (!configLoaded) {
+        console.log('📝 No MCP configuration found, using built-in tools only');
       }
       
     } catch (error) {
-      console.error('⚠️ Error cargando configuración MCP:', error);
+      console.error('⚠️ Error loading MCP configuration:', error);
     }
   }
 
-  // Método de utilidad para verificar servidores disponibles
+  // Utility method to check available servers
   async checkAvailableServers(): Promise<string[]> {
     const available: string[] = [];
     
-    // Servidores que sabemos que están instalados
+    // Servers we know are installed
     const installedServers = [
       'filesystem',
       'brave-search', 
@@ -574,7 +712,7 @@ export class McpManager extends EventEmitter {
           });
         });
       } catch (error) {
-        // Servidor no disponible
+        // Server not available
       }
     }
     

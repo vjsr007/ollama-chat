@@ -137,7 +137,7 @@ export const McpTools: React.FC<McpToolsProps> = ({ onToolCall }) => {
     <div className="mcp-tools">
       <div className="mcp-section">
         <div className="section-header">
-          <h3>🛠️ Herramientas Disponibles</h3>
+          <h3>🛠️ Available Tools</h3>
           <span className="tool-count">{tools.length}</span>
         </div>
         
@@ -149,9 +149,9 @@ export const McpTools: React.FC<McpToolsProps> = ({ onToolCall }) => {
               setToolArgs({});
             }}
             className="tool-selector"
-            title="Seleccionar herramienta MCP"
+            title="Select MCP tool"
           >
-            <option value="">Seleccionar herramienta...</option>
+            <option value="">Select tool...</option>
             {tools.map(tool => (
               <option key={tool.name} value={tool.name}>
                 {tool.name} {tool.origin === 'builtin' ? '🔧' : '🌐'}
@@ -191,7 +191,7 @@ export const McpTools: React.FC<McpToolsProps> = ({ onToolCall }) => {
               className="btn-tool-call"
               disabled={!selectedTool}
             >
-              Ejecutar Herramienta
+              Execute Tool
             </button>
           </div>
         )}
@@ -199,12 +199,12 @@ export const McpTools: React.FC<McpToolsProps> = ({ onToolCall }) => {
 
       <div className="mcp-section">
         <div className="section-header">
-          <h3>🖥️ Servidores MCP</h3>
+          <h3>🖥️ MCP Servers</h3>
           <button 
             onClick={() => setShowAddServer(true)}
             className="btn-add-server"
           >
-            Agregar Servidor
+            Add Server
           </button>
         </div>
         
@@ -243,7 +243,7 @@ export const McpTools: React.FC<McpToolsProps> = ({ onToolCall }) => {
           
           {servers.length === 0 && (
             <div className="no-servers">
-              No hay servidores configurados. Agrega uno para comenzar.
+              No servers configured. Add one to get started.
             </div>
           )}
         </div>
@@ -253,7 +253,7 @@ export const McpTools: React.FC<McpToolsProps> = ({ onToolCall }) => {
         <div className="modal-overlay">
           <div className="modal">
             <div className="modal-header">
-              <h3>Agregar Servidor MCP</h3>
+              <h3>Add MCP Server</h3>
               <button 
                 onClick={() => setShowAddServer(false)}
                 className="modal-close"
@@ -264,10 +264,10 @@ export const McpTools: React.FC<McpToolsProps> = ({ onToolCall }) => {
             
             <div className="modal-body">
               <div className="form-group">
-                <label>Nombre</label>
+                <label>Name</label>
                 <input
                   type="text"
-                  placeholder="Nombre del servidor"
+                  placeholder="Server name"
                   value={newServer.name}
                   onChange={(e) => setNewServer(prev => ({ ...prev, name: e.target.value }))}
                 />
@@ -278,7 +278,7 @@ export const McpTools: React.FC<McpToolsProps> = ({ onToolCall }) => {
                 <select
                   value={newServer.type}
                   onChange={(e) => setNewServer(prev => ({ ...prev, type: e.target.value as any }))}
-                  title="Tipo de servidor MCP"
+                  title="MCP server type"
                 >
                   <option value="stdio">STDIO</option>
                   <option value="ws">WebSocket</option>
@@ -287,7 +287,7 @@ export const McpTools: React.FC<McpToolsProps> = ({ onToolCall }) => {
               </div>
               
               <div className="form-group">
-                <label>Comando</label>
+                <label>Command</label>
                 <input
                   type="text"
                   placeholder="npx @modelcontextprotocol/server-filesystem"
@@ -297,7 +297,7 @@ export const McpTools: React.FC<McpToolsProps> = ({ onToolCall }) => {
               </div>
               
               <div className="form-group">
-                <label>Argumentos</label>
+                <label>Arguments</label>
                 <input
                   type="text"
                   placeholder="--port 8080"
@@ -320,14 +320,14 @@ export const McpTools: React.FC<McpToolsProps> = ({ onToolCall }) => {
             
             <div className="modal-footer">
               <button onClick={() => setShowAddServer(false)} className="btn-cancel">
-                Cancelar
+                Cancel
               </button>
               <button 
                 onClick={addServer} 
                 className="btn-add"
                 disabled={!newServer.name || !newServer.command}
               >
-                Agregar
+                Add
               </button>
             </div>
           </div>

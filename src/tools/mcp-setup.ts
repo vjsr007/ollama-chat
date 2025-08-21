@@ -26,7 +26,7 @@ const commonMcpServers: McpServerConfig[] = [
     type: 'stdio',
     command: 'npx',
     args: ['@modelcontextprotocol/server-filesystem', process.cwd()],
-    description: 'Acceso seguro al sistema de archivos',
+    description: 'Secure file system access',
     category: 'core'
   },
   {

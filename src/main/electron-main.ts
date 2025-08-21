@@ -2,14 +2,14 @@ import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import path from 'path';
 // MCP Manager
 import { McpManager } from '../shared/infrastructure/mcp/McpManager';
-// Resolución dinámica de OllamaClient considerando distintas estructuras de build
+// Dynamic resolution of OllamaClient considering different build structures
 let OllamaClientMod: any;
 const candidatePaths = [
-  // Ejecutando desde raíz del proyecto tras build (electron .)
+  // Running from project root after build (electron .)
   path.join(process.cwd(), 'dist/shared/infrastructure/ollama/OllamaClient.js'),
-  // Relativo al archivo compilado (dist/main/main/electron-main.js -> ../../shared/...)
+  // Relative to compiled file (dist/main/main/electron-main.js -> ../../shared/...)
   path.join(__dirname, '../../shared/infrastructure/ollama/OllamaClient.js'),
-  // Fallback a código fuente (dev)
+  // Fallback to source code (dev)
   path.join(process.cwd(), 'src/shared/infrastructure/ollama/OllamaClient.ts')
 ];
 for (const p of candidatePaths) {
@@ -17,10 +17,10 @@ for (const p of candidatePaths) {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     OllamaClientMod = require(p);
     break;
-  } catch { /* continuar */ }
+  } catch { /* continue */ }
 }
 if (!OllamaClientMod) {
-  throw new Error('No se pudo cargar el módulo OllamaClient en ninguna de las rutas esperadas');
+  throw new Error('Could not load OllamaClient module in any of the expected paths');
 }
 const { OllamaClient } = OllamaClientMod;
 // Types
@@ -59,8 +59,12 @@ app.whenReady().then(async () => {
   
   // Cargar configuración MCP por defecto
   try {
-    await mcpManager.loadDefaultConfiguration(__dirname);
-    console.log('🔧 MCP Manager inicializado');
+    // Usar el directorio del proyecto, no __dirname que apunta a dist/main
+    // __dirname = dist/main, necesitamos subir 2 niveles para llegar al proyecto
+    const projectRoot = path.join(__dirname, '..', '..', '..');
+    console.log('🔍 Project root calculated:', projectRoot);
+    await mcpManager.loadDefaultConfiguration(projectRoot);
+    console.log('🔧 MCP Manager initialized');
   } catch (error) {
     console.error('⚠️ Error inicializando MCP Manager:', error);
   }
@@ -79,7 +83,9 @@ ipcMain.handle('models:list', async () => {
 });
 
 ipcMain.handle('chat:send', async (_e, req: ChatRequest) => {
-  return await ollama.generate(req);
+  // Get available MCP tools
+  const tools = await mcpManager.getAllTools();
+  return await ollama.generate(req, tools);
 });
 
 ipcMain.handle('dialog:openImage', async () => {

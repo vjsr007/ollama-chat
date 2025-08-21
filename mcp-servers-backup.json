@@ -1,0 +1,107 @@
+{
+  "version": "1.0.0",
+  "description": "Configuración de servidores MCP para Ollama Chat",
+  "servers": {
+    "filesystem": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "@modelcontextprotocol/server-filesystem",
+        "D:\\MyProjects\\ollama-chat"
+      ],
+      "description": "Acceso seguro al sistema de archivos",
+      "category": "core",
+      "enabled": false
+    },
+    "brave-search": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "@modelcontextprotocol/server-brave-search"
+      ],
+      "description": "Búsqueda web con Brave Search API",
+      "category": "search",
+      "enabled": false
+    },
+    "github": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "@modelcontextprotocol/server-github"
+      ],
+      "description": "Integración con GitHub (repos, issues, PRs)",
+      "category": "development",
+      "enabled": false
+    },
+    "postgres": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "@modelcontextprotocol/server-postgres"
+      ],
+      "description": "Conexión a bases de datos PostgreSQL",
+      "category": "database",
+      "enabled": false
+    },
+    "sqlite": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "@modelcontextprotocol/server-sqlite"
+      ],
+      "description": "Gestión de bases de datos SQLite",
+      "category": "database",
+      "enabled": false
+    },
+    "puppeteer": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "@modelcontextprotocol/server-puppeteer"
+      ],
+      "description": "Automatización web con Puppeteer",
+      "category": "automation",
+      "enabled": false
+    },
+    "memory": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "@modelcontextprotocol/server-memory"
+      ],
+      "description": "Sistema de memoria persistente",
+      "category": "core",
+      "enabled": false
+    },
+    "docker": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "@modelcontextprotocol/server-docker"
+      ],
+      "description": "Gestión de contenedores Docker",
+      "category": "infrastructure",
+      "enabled": false
+    },
+    "fetch": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "@modelcontextprotocol/server-fetch"
+      ],
+      "description": "Cliente HTTP para APIs externas",
+      "category": "network",
+      "enabled": false
+    },
+    "git": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "@modelcontextprotocol/server-git"
+      ],
+      "description": "Operaciones Git (status, commit, push)",
+      "category": "development",
+      "enabled": false
+    }
+  }
+}

@@ -22,6 +22,8 @@ export interface McpServer {
   enabled: boolean;
   auto_restart?: boolean;
   status?: 'stopped' | 'starting' | 'ready' | 'error' | 'connecting' | 'closed';
+  description?: string;
+  category?: string;
 }
 
 export interface McpToolCall {

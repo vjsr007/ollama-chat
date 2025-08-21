@@ -12,7 +12,7 @@ const App: React.FC = () => {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [imagePath, setImagePath] = useState<string | undefined>();
-  const [systemPrompt, setSystemPrompt] = useState('Eres un asistente útil.');
+  const [systemPrompt, setSystemPrompt] = useState('You are a helpful assistant.');
   const [activeTab, setActiveTab] = useState<'chat' | 'tools'>('chat');
   const chatRef = useRef<HTMLDivElement | null>(null);
 
@@ -54,7 +54,7 @@ const App: React.FC = () => {
       
       const toolMessage: ChatMessage = {
         role: 'system',
-        content: `Herramienta ejecutada: ${call.tool}\nResultado: ${JSON.stringify(result.result || result.error, null, 2)}`
+        content: `Tool executed: ${call.tool}\nResult: ${JSON.stringify(result.result || result.error, null, 2)}`
       };
       
       setMessages(prev => [...prev, toolMessage]);
@@ -83,21 +83,21 @@ const App: React.FC = () => {
             className={`tab-btn ${activeTab === 'tools' ? 'active' : ''}`}
             onClick={() => setActiveTab('tools')}
           >
-            🛠️ Herramientas
+            🛠️ Tools
           </button>
         </div>
         <div className="actions">
-          <button onClick={() => setMessages([])} disabled={!messages.length || isLoading}>Limpiar</button>
+          <button onClick={() => setMessages([])} disabled={!messages.length || isLoading}>Clear</button>
         </div>
       </div>
       <div className="toolbar">
-        <label htmlFor="modelSelect">Modelo:</label>
-        <select id="modelSelect" value={model} onChange={e => setModel(e.target.value)} aria-label="Seleccionar modelo">
+        <label htmlFor="modelSelect">Model:</label>
+        <select id="modelSelect" value={model} onChange={e => setModel(e.target.value)} aria-label="Select model">
           {models.map(m => <option key={m} value={m}>{m}</option>)}
         </select>
-        <button onClick={pickImage} aria-label="Adjuntar imagen">📷 Imagen</button>
+        <button onClick={pickImage} aria-label="Attach image">📷 Image</button>
         {imagePath && (
-          <span className="image-chip">{imagePath.split(/\\|\//).pop()} <button onClick={() => setImagePath(undefined)} aria-label="Quitar imagen">✕</button></span>
+          <span className="image-chip">{imagePath.split(/\\|\//).pop()} <button onClick={() => setImagePath(undefined)} aria-label="Remove image">✕</button></span>
         )}
       </div>
       
@@ -112,29 +112,29 @@ const App: React.FC = () => {
                   <div key={i} className={`msg ${m.role}`}>
                     <span className="msg-role">{m.role}</span>
                     <div className="msg-content">{m.content}</div>
-                    {m.imagePath && <div className="attachment">Imagen adjunta</div>}
+                    {m.imagePath && <div className="attachment">Attached image</div>}
                   </div>
                 ))}
-                {isLoading && <div className="msg assistant loading">Pensando...</div>}
+                {isLoading && <div className="msg assistant loading">Thinking...</div>}
               </div>
             </div>
-            <aside className="side-panel" aria-label="Opciones">
+            <aside className="side-panel" aria-label="Options">
               <div className="panel">
                 <div className="info-line">System Prompt</div>
-                <textarea className="system-textarea" value={systemPrompt} onChange={e => setSystemPrompt(e.target.value)} placeholder="Instrucciones del asistente" />
+                <textarea className="system-textarea" value={systemPrompt} onChange={e => setSystemPrompt(e.target.value)} placeholder="Assistant instructions" />
               </div>
               <div className="panel flex1">
-                <div className="info-line">Ayuda</div>
+                <div className="info-line">Help</div>
                 <p className="help-text">
-                  Escribe tu mensaje y pulsa Enviar. Puedes adjuntar una imagen para modelos con visión. El primer mensaje incluirá el system prompt si está definido.
+                  Type your message and press Send. You can attach an image for vision models. The first message will include the system prompt if defined.
                 </p>
               </div>
             </aside>
           </div>
           <div className="footer">
-            <label htmlFor="chatInput" className="visually-hidden">Mensaje</label>
-            <textarea id="chatInput" value={input} onChange={e => setInput(e.target.value)} placeholder="Escribe tu mensaje" onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }} />
-            <button className="primary send-button" onClick={send} disabled={isLoading || !input.trim()}>{isLoading ? 'Generando…' : 'Enviar'}</button>
+            <label htmlFor="chatInput" className="visually-hidden">Message</label>
+            <textarea id="chatInput" value={input} onChange={e => setInput(e.target.value)} placeholder="Type your message" onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }} />
+            <button className="primary send-button" onClick={send} disabled={isLoading || !input.trim()}>{isLoading ? 'Generating…' : 'Send'}</button>
           </div>
         </>
       )}

@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { ChatMessage } from '../shared/domain/chat';
+import { McpTools } from './components/McpTools';
+import type { McpToolCall, McpToolResult } from '../shared/domain/mcp';
 import './styles.css';
 
 const App: React.FC = () => {
@@ -11,6 +13,7 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [imagePath, setImagePath] = useState<string | undefined>();
   const [systemPrompt, setSystemPrompt] = useState('Eres un asistente útil.');
+  const [activeTab, setActiveTab] = useState<'chat' | 'tools'>('chat');
   const chatRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -44,10 +47,45 @@ const App: React.FC = () => {
     if (p) setImagePath(p);
   };
 
+  const handleToolCall = async (call: McpToolCall) => {
+    try {
+      setIsLoading(true);
+      const result: McpToolResult = await window.mcp.callTool(call);
+      
+      const toolMessage: ChatMessage = {
+        role: 'system',
+        content: `Herramienta ejecutada: ${call.tool}\nResultado: ${JSON.stringify(result.result || result.error, null, 2)}`
+      };
+      
+      setMessages(prev => [...prev, toolMessage]);
+      
+      // Switch to chat tab to show result
+      setActiveTab('chat');
+    } catch (error) {
+      console.error('Tool call failed:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="app" role="main">
       <div className="topbar">
         <div className="logo"><span className="brand">Local</span> Ollama Chat</div>
+        <div className="tab-buttons">
+          <button 
+            className={`tab-btn ${activeTab === 'chat' ? 'active' : ''}`}
+            onClick={() => setActiveTab('chat')}
+          >
+            💬 Chat
+          </button>
+          <button 
+            className={`tab-btn ${activeTab === 'tools' ? 'active' : ''}`}
+            onClick={() => setActiveTab('tools')}
+          >
+            🛠️ Herramientas
+          </button>
+        </div>
         <div className="actions">
           <button onClick={() => setMessages([])} disabled={!messages.length || isLoading}>Limpiar</button>
         </div>
@@ -62,39 +100,50 @@ const App: React.FC = () => {
           <span className="image-chip">{imagePath.split(/\\|\//).pop()} <button onClick={() => setImagePath(undefined)} aria-label="Quitar imagen">✕</button></span>
         )}
       </div>
-  <div className="layout">
-        <div className="chat-wrapper">
-          <div className="scroll-fade-top" />
-          <div className="scroll-fade-bottom" />
-          <div ref={chatRef} className="chat" aria-live="polite">
-            {messages.map((m,i) => (
-              <div key={i} className={`msg ${m.role}`}>
-                <span className="msg-role">{m.role}</span>
-                <div className="msg-content">{m.content}</div>
-                {m.imagePath && <div className="attachment">Imagen adjunta</div>}
+      
+      {activeTab === 'chat' && (
+        <>
+          <div className="layout">
+            <div className="chat-wrapper">
+              <div className="scroll-fade-top" />
+              <div className="scroll-fade-bottom" />
+              <div ref={chatRef} className="chat" aria-live="polite">
+                {messages.map((m,i) => (
+                  <div key={i} className={`msg ${m.role}`}>
+                    <span className="msg-role">{m.role}</span>
+                    <div className="msg-content">{m.content}</div>
+                    {m.imagePath && <div className="attachment">Imagen adjunta</div>}
+                  </div>
+                ))}
+                {isLoading && <div className="msg assistant loading">Pensando...</div>}
               </div>
-            ))}
-            {isLoading && <div className="msg assistant loading">Pensando...</div>}
+            </div>
+            <aside className="side-panel" aria-label="Opciones">
+              <div className="panel">
+                <div className="info-line">System Prompt</div>
+                <textarea className="system-textarea" value={systemPrompt} onChange={e => setSystemPrompt(e.target.value)} placeholder="Instrucciones del asistente" />
+              </div>
+              <div className="panel flex1">
+                <div className="info-line">Ayuda</div>
+                <p className="help-text">
+                  Escribe tu mensaje y pulsa Enviar. Puedes adjuntar una imagen para modelos con visión. El primer mensaje incluirá el system prompt si está definido.
+                </p>
+              </div>
+            </aside>
           </div>
+          <div className="footer">
+            <label htmlFor="chatInput" className="visually-hidden">Mensaje</label>
+            <textarea id="chatInput" value={input} onChange={e => setInput(e.target.value)} placeholder="Escribe tu mensaje" onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }} />
+            <button className="primary send-button" onClick={send} disabled={isLoading || !input.trim()}>{isLoading ? 'Generando…' : 'Enviar'}</button>
+          </div>
+        </>
+      )}
+      
+      {activeTab === 'tools' && (
+        <div className="tools-container">
+          <McpTools onToolCall={handleToolCall} />
         </div>
-        <aside className="side-panel" aria-label="Opciones">
-          <div className="panel">
-            <div className="info-line">System Prompt</div>
-            <textarea className="system-textarea" value={systemPrompt} onChange={e => setSystemPrompt(e.target.value)} placeholder="Instrucciones del asistente" />
-          </div>
-          <div className="panel flex1">
-            <div className="info-line">Ayuda</div>
-            <p className="help-text">
-              Escribe tu mensaje y pulsa Enviar. Puedes adjuntar una imagen para modelos con visión. El primer mensaje incluirá el system prompt si está definido.
-            </p>
-          </div>
-        </aside>
-      </div>
-      <div className="footer">
-        <label htmlFor="chatInput" className="visually-hidden">Mensaje</label>
-        <textarea id="chatInput" value={input} onChange={e => setInput(e.target.value)} placeholder="Escribe tu mensaje" onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }} />
-  <button className="primary send-button" onClick={send} disabled={isLoading || !input.trim()}>{isLoading ? 'Generando…' : 'Enviar'}</button>
-      </div>
+      )}
     </div>
   );
 };

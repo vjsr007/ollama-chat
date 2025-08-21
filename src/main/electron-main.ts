@@ -1,5 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import path from 'path';
+// MCP Manager
+import { McpManager } from '../shared/infrastructure/mcp/McpManager';
 // Resolución dinámica de OllamaClient considerando distintas estructuras de build
 let OllamaClientMod: any;
 const candidatePaths = [
@@ -23,9 +25,11 @@ if (!OllamaClientMod) {
 const { OllamaClient } = OllamaClientMod;
 // Types
 import type { ChatRequest } from '../shared/domain/chat';
+import type { McpToolCall, McpServer } from '../shared/domain/mcp';
 
 let mainWindow: BrowserWindow | null = null;
 const ollama = new OllamaClient();
+const mcpManager = new McpManager(process.cwd());
 
 async function createWindow() {
   mainWindow = new BrowserWindow({
@@ -50,8 +54,17 @@ async function createWindow() {
   if (process.env.VITE_DEV_SERVER_URL) mainWindow.webContents.openDevTools();
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   createWindow();
+  
+  // Cargar configuración MCP por defecto
+  try {
+    await mcpManager.loadDefaultConfiguration(__dirname);
+    console.log('🔧 MCP Manager inicializado');
+  } catch (error) {
+    console.error('⚠️ Error inicializando MCP Manager:', error);
+  }
+  
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
@@ -78,4 +91,37 @@ ipcMain.handle('dialog:openImage', async () => {
   });
   if (result.canceled || result.filePaths.length === 0) return null;
   return result.filePaths[0];
+});
+
+// MCP IPC Handlers
+ipcMain.handle('mcp:get-tools', async () => {
+  return mcpManager.getAllTools();
+});
+
+ipcMain.handle('mcp:call-tool', async (_e, call: McpToolCall) => {
+  return await mcpManager.callTool(call);
+});
+
+ipcMain.handle('mcp:get-servers', async () => {
+  return mcpManager.getServers();
+});
+
+ipcMain.handle('mcp:add-server', async (_e, config: Omit<McpServer, 'id'>) => {
+  return await mcpManager.addServer(config);
+});
+
+ipcMain.handle('mcp:start-server', async (_e, id: string) => {
+  await mcpManager.startServer(id);
+});
+
+ipcMain.handle('mcp:stop-server', async (_e, id: string) => {
+  mcpManager.stopServer(id);
+});
+
+ipcMain.handle('mcp:remove-server', async (_e, id: string) => {
+  mcpManager.removeServer(id);
+});
+
+ipcMain.handle('mcp:get-server-tools', async (_e, serverId: string) => {
+  return mcpManager.getServerTools(serverId);
 });

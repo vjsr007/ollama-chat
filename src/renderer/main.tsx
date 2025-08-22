@@ -74,6 +74,12 @@ const App: React.FC = () => {
     
     // Load available tools for autocompletion
     loadAvailableTools();
+    const handler = () => {
+      console.log('🌐 External models updated event received, reloading');
+      loadExternalModels();
+    };
+    window.addEventListener('external-models-updated', handler);
+    return () => window.removeEventListener('external-models-updated', handler);
   }, []);
 
   // Reload tools when activeTab changes to ensure fresh data

@@ -4,7 +4,7 @@ import './ModelManager.css';
 interface ExternalModel {
   id: string;
   name: string;
-  provider: 'openai' | 'anthropic' | 'github-copilot' | 'google' | 'cohere';
+  provider: 'openai' | 'anthropic' | 'github-copilot' | 'google' | 'cohere' | 'mistral' | 'custom';
   model: string;
   apiKey?: string;
   endpoint?: string;
@@ -33,7 +33,7 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
   });
 
   // Popular predefined models
-  const predefinedModels = {
+  const predefinedModels: Record<string, any[]> = {
     'openai': [
       { model: 'gpt-4o', name: 'GPT-4o', description: 'OpenAI\'s most advanced model' },
       { model: 'gpt-4o-mini', name: 'GPT-4o Mini', description: 'Optimized version of GPT-4o' },
@@ -58,6 +58,11 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
     'cohere': [
       { model: 'command-r-plus', name: 'Command R+', description: 'Cohere\'s premium model' },
       { model: 'command-r', name: 'Command R', description: 'Cohere\'s standard model' }
+    ],
+    'mistral': [
+      { model: 'mistral-large-latest', name: 'Mistral Large', description: 'Largest Mistral reasoning model' },
+      { model: 'mistral-small-latest', name: 'Mistral Small', description: 'Smaller fast Mistral model' },
+      { model: 'codestral-latest', name: 'Codestral', description: 'Mistral code generation model' }
     ]
   };
 
@@ -106,6 +111,7 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
       const response = await (window as any).externalModels?.add(modelToAdd);
       if (response && response.success) {
         await loadExternalModels(); // Reload the list
+        window.dispatchEvent(new Event('external-models-updated'));
         
         setNewModel({
           provider: 'openai',
@@ -128,6 +134,7 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
       const response = await (window as any).externalModels?.remove(id);
       if (response && response.success) {
         await loadExternalModels(); // Reload the list
+        window.dispatchEvent(new Event('external-models-updated'));
       } else {
         alert('Error removing model');
       }
@@ -145,6 +152,7 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
       const response = await (window as any).externalModels?.toggle(id, !model.enabled);
       if (response && response.success) {
         await loadExternalModels(); // Reload the list
+        window.dispatchEvent(new Event('external-models-updated'));
       } else {
         alert('Error changing model status');
       }
@@ -210,6 +218,7 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
       const response = await (window as any).externalModels?.update(editingModel.id, modelToUpdate);
       if (response && response.success) {
         await loadExternalModels(); // Reload the list
+        window.dispatchEvent(new Event('external-models-updated'));
         
         setNewModel({
           provider: 'openai',
@@ -245,7 +254,9 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
       case 'anthropic': return '🧠';
       case 'github-copilot': return '🐙';
       case 'google': return '🔍';
-      case 'cohere': return '⚡';
+  case 'cohere': return '⚡';
+  case 'mistral': return '🌀';
+  case 'custom': return '🛠️';
       default: return '🌐';
     }
   };
@@ -256,7 +267,9 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
       case 'anthropic': return '#d97706';
       case 'github-copilot': return '#6366f1';
       case 'google': return '#4285f4';
-      case 'cohere': return '#8b5cf6';
+  case 'cohere': return '#8b5cf6';
+  case 'mistral': return '#0ea5e9';
+  case 'custom': return '#6b7280';
       default: return '#6b7280';
     }
   };
@@ -454,6 +467,8 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
                     <option value="github-copilot">GitHub Copilot</option>
                     <option value="google">Google</option>
                     <option value="cohere">Cohere</option>
+                    <option value="mistral">Mistral</option>
+                    <option value="custom">Custom (OpenAI-Compatible)</option>
                   </select>
                 </div>
                 
@@ -507,6 +522,18 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
                   placeholder="Model description"
                 />
               </div>
+
+              {(newModel.provider === 'openai' || newModel.provider === 'custom') && (
+                <div className="form-group">
+                  <label>Custom Endpoint (optional)</label>
+                  <input
+                    type="text"
+                    value={newModel.endpoint || ''}
+                    onChange={(e) => setNewModel(prev => ({ ...prev, endpoint: e.target.value }))}
+                    placeholder="https://api.your-endpoint.com/v1"
+                  />
+                </div>
+              )}
 
               <div className="form-row">
                 <div className="form-group">

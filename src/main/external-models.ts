@@ -6,7 +6,7 @@ import keytar from 'keytar';
 export interface ExternalModel {
   id: string;
   name: string;
-  provider: 'openai' | 'anthropic' | 'github-copilot' | 'google' | 'cohere';
+  provider: 'openai' | 'anthropic' | 'github-copilot' | 'google' | 'cohere' | 'mistral' | 'custom';
   model: string;
   // apiKey is no longer persisted to disk. At runtime we may return a sentinel value "__SECURE__" to indicate a stored key.
   apiKey?: string; 
@@ -275,6 +275,13 @@ export class ExternalModelManager {
       } else if (model.provider === 'cohere') {
         ok = await this.validateCohereKey(apiKey);
         if (!ok) msg = 'Cohere key invalid';
+      } else if (model.provider === 'mistral') {
+        ok = await this.validateMistralKey(apiKey);
+        if (!ok) msg = 'Mistral key invalid';
+      } else if (model.provider === 'custom') {
+        // Treat as OpenAI compatible
+        ok = await this.validateOpenAIKey(apiKey, model.endpoint || '');
+        if (!ok) msg = 'Custom (OpenAI-compatible) key invalid or endpoint unreachable';
       }
       model.lastValidationStatus = ok ? 'valid' : 'invalid';
       model.lastValidationMessage = msg;
@@ -310,6 +317,10 @@ export class ExternalModelManager {
           return await this.validateGoogleKey(apiKey);
         case 'cohere':
           return await this.validateCohereKey(apiKey);
+        case 'mistral':
+          return await this.validateMistralKey(apiKey);
+        case 'custom':
+          return await this.validateOpenAIKey(apiKey, endpoint);
         default:
           return false;
       }
@@ -396,6 +407,20 @@ export class ExternalModelManager {
     }
   }
 
+  private async validateMistralKey(apiKey: string): Promise<boolean> {
+    try {
+      const response = await fetch('https://api.mistral.ai/v1/models', {
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
   // Generate chat completion for external models
   public async generateChatCompletion(
     modelId: string, 
@@ -420,6 +445,11 @@ export class ExternalModelManager {
     return await this.callGoogle({ ...model, apiKey }, messages, options);
       case 'cohere':
     return await this.callCohere({ ...model, apiKey }, messages, options);
+      case 'mistral':
+        return await this.callMistral({ ...model, apiKey }, messages, options);
+      case 'custom':
+        // Treat as OpenAI compatible using provided endpoint
+        return await this.callOpenAI({ ...model, apiKey }, messages, options);
       default:
         throw new Error(`Unsupported provider: ${model.provider}`);
     }
@@ -608,5 +638,31 @@ export class ExternalModelManager {
 
     const data = await response.json();
     return data.text || '';
+  }
+
+  private async callMistral(model: ExternalModel, messages: any[], options?: any): Promise<string> {
+    // Mistral chat completion (OpenAI-like but different endpoint path)
+    const baseURL = 'https://api.mistral.ai/v1';
+    const body = {
+      model: model.model,
+      messages,
+      temperature: options?.temperature ?? model.temperature ?? 0.7,
+      max_tokens: options?.maxTokens ?? model.maxTokens ?? 4096,
+      stream: false
+    };
+    const response = await fetch(`${baseURL}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${model.apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
+    });
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Mistral API error: ${response.status} - ${error}`);
+    }
+    const data = await response.json();
+    return data.choices?.[0]?.message?.content || '';
   }
 }

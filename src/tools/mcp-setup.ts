@@ -2,7 +2,7 @@
 
 /**
  * MCP Setup Tool
- * Configura servidores MCP comunes que usa Copilot
+ * Configures common MCP servers used by Copilot
  */
 
 import * as fs from 'fs/promises';
@@ -19,7 +19,7 @@ interface McpServerConfig {
   category: string;
 }
 
-// Configuraciones de servidores MCP comunes
+// Common MCP server configurations
 const commonMcpServers: McpServerConfig[] = [
   {
     name: 'filesystem',
@@ -34,7 +34,7 @@ const commonMcpServers: McpServerConfig[] = [
     type: 'stdio',
     command: 'npx',
     args: ['@modelcontextprotocol/server-brave-search'],
-    description: 'Búsqueda web con Brave Search API',
+  description: 'Web search using Brave Search API',
     category: 'search'
   },
   {
@@ -42,7 +42,7 @@ const commonMcpServers: McpServerConfig[] = [
     type: 'stdio',
     command: 'npx',
     args: ['@modelcontextprotocol/server-github'],
-    description: 'Integración con GitHub (repos, issues, PRs)',
+  description: 'GitHub integration (repos, issues, PRs)',
     category: 'development'
   },
   {
@@ -50,7 +50,7 @@ const commonMcpServers: McpServerConfig[] = [
     type: 'stdio',
     command: 'npx',
     args: ['@modelcontextprotocol/server-postgres'],
-    description: 'Conexión a bases de datos PostgreSQL',
+  description: 'PostgreSQL database connection',
     category: 'database'
   },
   {
@@ -58,7 +58,7 @@ const commonMcpServers: McpServerConfig[] = [
     type: 'stdio',
     command: 'npx',
     args: ['@modelcontextprotocol/server-sqlite'],
-    description: 'Gestión de bases de datos SQLite',
+  description: 'SQLite database management',
     category: 'database'
   },
   {
@@ -66,7 +66,7 @@ const commonMcpServers: McpServerConfig[] = [
     type: 'stdio',
     command: 'npx',
     args: ['@modelcontextprotocol/server-puppeteer'],
-    description: 'Automatización web con Puppeteer',
+  description: 'Web automation with Puppeteer',
     category: 'automation'
   },
   {
@@ -74,7 +74,7 @@ const commonMcpServers: McpServerConfig[] = [
     type: 'stdio',
     command: 'npx',
     args: ['@modelcontextprotocol/server-memory'],
-    description: 'Sistema de memoria persistente',
+  description: 'Persistent memory system',
     category: 'core'
   },
   {
@@ -82,7 +82,7 @@ const commonMcpServers: McpServerConfig[] = [
     type: 'stdio',
     command: 'npx',
     args: ['@modelcontextprotocol/server-docker'],
-    description: 'Gestión de contenedores Docker',
+  description: 'Docker container management',
     category: 'infrastructure'
   },
   {
@@ -90,7 +90,7 @@ const commonMcpServers: McpServerConfig[] = [
     type: 'stdio',
     command: 'npx',
     args: ['@modelcontextprotocol/server-fetch'],
-    description: 'Cliente HTTP para APIs externas',
+  description: 'HTTP client for external APIs',
     category: 'network'
   },
   {
@@ -98,12 +98,12 @@ const commonMcpServers: McpServerConfig[] = [
     type: 'stdio',
     command: 'npx',
     args: ['@modelcontextprotocol/server-git'],
-    description: 'Operaciones Git (status, commit, push)',
+  description: 'Git operations (status, commit, push)',
     category: 'development'
   }
 ];
 
-// Paquetes npm MCP para instalar globalmente
+// MCP npm packages to install globally
 const mcpPackages = [
   '@modelcontextprotocol/server-filesystem',
   '@modelcontextprotocol/server-brave-search', 
@@ -118,15 +118,15 @@ const mcpPackages = [
 ];
 
 async function installMcpPackages() {
-  console.log('🔧 Instalando paquetes MCP globalmente...\n');
+  console.log('🔧 Installing MCP packages globally...\n');
   
   for (const pkg of mcpPackages) {
     try {
-      console.log(`📦 Instalando ${pkg}...`);
+  console.log(`📦 Installing ${pkg}...`);
       execSync(`npm install -g ${pkg}`, { stdio: 'inherit' });
-      console.log(`✅ ${pkg} instalado correctamente\n`);
+  console.log(`✅ ${pkg} installed successfully\n`);
     } catch (error) {
-      console.error(`❌ Error instalando ${pkg}:`, error);
+  console.error(`❌ Error installing ${pkg}:`, error);
     }
   }
 }
@@ -136,7 +136,7 @@ async function createMcpConfigFile() {
   
   const config = {
     version: '1.0.0',
-    description: 'Configuración de servidores MCP para Ollama Chat',
+  description: 'MCP server configuration for Ollama Chat',
     servers: commonMcpServers.reduce((acc, server) => {
       acc[server.name] = {
         type: server.type,
@@ -145,20 +145,20 @@ async function createMcpConfigFile() {
         url: server.url,
         description: server.description,
         category: server.category,
-        enabled: false // Por defecto deshabilitados
+  enabled: false // Disabled by default
       };
       return acc;
     }, {} as Record<string, any>)
   };
 
   await fs.writeFile(configPath, JSON.stringify(config, null, 2));
-  console.log(`📄 Archivo de configuración creado: ${configPath}`);
+  console.log(`📄 Configuration file created: ${configPath}`);
 }
 
 async function createEnvTemplate() {
   const envPath = path.join(process.cwd(), '.env.example');
   
-  const envTemplate = `# Configuración para servidores MCP
+  const envTemplate = `# Configuration for MCP servers
 
 # GitHub MCP Server
 GITHUB_TOKEN=your_github_token_here
@@ -169,14 +169,14 @@ BRAVE_API_KEY=your_brave_api_key_here
 # PostgreSQL MCP Server
 POSTGRES_CONNECTION_STRING=postgresql://user:password@localhost:5432/database
 
-# Configuración general
+# General configuration
 MCP_LOG_LEVEL=info
 MCP_TIMEOUT=300000
 MCP_MAX_CONCURRENT_TOOLS=5
 `;
 
   await fs.writeFile(envPath, envTemplate);
-  console.log(`🔐 Plantilla de variables de entorno creada: ${envPath}`);
+  console.log(`🔐 Environment variables template created: ${envPath}`);
 }
 
 async function createMcpTestScript() {
@@ -186,20 +186,21 @@ async function createMcpTestScript() {
 
 /**
  * MCP Test Tool
- * Prueba la conectividad con servidores MCP
+ * Tests connectivity with MCP servers
  */
+   * Tests connectivity with MCP servers
 
 import { spawn } from 'child_process';
 
 async function testMcpServer(name: string, command: string, args: string[]) {
-  console.log(\`🧪 Probando servidor MCP: \${name}\`);
+  console.log(\`🧪 Testing MCP server: \${name}\`);
   
   try {
     const child = spawn(command, args, {
       stdio: ['pipe', 'pipe', 'pipe']
     });
     
-    // Enviar solicitud de inicialización
+  // Send initialization request
     const initRequest = {
       jsonrpc: '2.0',
       id: 1,
@@ -235,23 +236,23 @@ async function testMcpServer(name: string, command: string, args: string[]) {
       child.on('exit', (code) => {
         clearTimeout(timeout);
         if (code === 0 || output.includes('jsonrpc')) {
-          console.log(\`✅ \${name} responde correctamente\`);
+          console.log(\`✅ \${name} responds correctly\`);
           resolve(true);
         } else {
-          console.log(\`❌ \${name} no responde (código: \${code})\`);
+          console.log(\`❌ \${name} not responding (code: \${code})\`);
           resolve(false);
         }
       });
     });
     
   } catch (error) {
-    console.error(\`❌ Error probando \${name}:\`, error);
+  console.error(\`❌ Error testing \${name}:\`, error);
     return false;
   }
 }
 
 async function main() {
-  console.log('🔍 Probando servidores MCP disponibles...\\n');
+  console.log('🔍 Testing available MCP servers...\\n');
   
   const servers = [
     { name: 'filesystem', command: 'npx', args: ['@modelcontextprotocol/server-filesystem', '.'] },
@@ -264,7 +265,7 @@ async function main() {
     console.log();
   }
   
-  console.log('✨ Pruebas completadas');
+  console.log('✨ Tests completed');
 }
 
 if (require.main === module) {
@@ -273,34 +274,34 @@ if (require.main === module) {
 `;
 
   await fs.writeFile(testPath, testScript);
-  console.log(`🧪 Script de pruebas MCP creado: ${testPath}`);
+  console.log(`🧪 MCP test script created: ${testPath}`);
 }
 
 async function main() {
-  console.log('🚀 Configurando entorno MCP completo para Ollama Chat\n');
+  console.log('🚀 Setting up full MCP environment for Ollama Chat\n');
   
   try {
-    // 1. Instalar paquetes MCP
+  // 1. Install MCP packages
     await installMcpPackages();
     
-    // 2. Crear archivo de configuración
+  // 2. Create configuration file
     await createMcpConfigFile();
     
-    // 3. Crear plantilla de variables de entorno
+  // 3. Create environment variables template
     await createEnvTemplate();
     
-    // 4. Crear script de pruebas
+  // 4. Create test script
     await createMcpTestScript();
     
-    console.log('\n✨ Configuración MCP completada!');
-    console.log('\n📋 Próximos pasos:');
-    console.log('1. Copia .env.example a .env y configura tus tokens');
-    console.log('2. Ejecuta "npm run mcp:test" para probar la conectividad');
-    console.log('3. Usa el archivo mcp-servers.json para configurar servidores');
-    console.log('4. Inicia la aplicación con "npm start" y ve a la pestaña Tools');
+  console.log('\n✨ MCP setup completed!');
+  console.log('\n📋 Next steps:');
+  console.log('1. Copy .env.example to .env and configure your tokens');
+  console.log('2. Run "npm run mcp:test" to test connectivity');
+  console.log('3. Use the mcp-servers.json file to configure servers');
+  console.log('4. Start the app with "npm start" and open the Tools tab');
     
   } catch (error) {
-    console.error('❌ Error durante la configuración:', error);
+  console.error('❌ Error during setup:', error);
     process.exit(1);
   }
 }

@@ -203,24 +203,27 @@ npm install
 npm run mcp:setup
 ```
 
-### (Nuevo) Setup Automático Completo
-Si prefieres que el proyecto instale todo (Ollama, modelo base y servidores MCP) ejecuta:
+### (New) Full Automatic Setup
+
+If you prefer the project to install everything (Ollama, base model and MCP servers) run:
 
 ```bash
 npm run setup:full
 ```
 
-Este script hará:
-1. Instalar Ollama (winget / brew / script oficial) si no está presente
-2. Verificar/iniciar el servicio de Ollama
-3. Descargar el modelo base `llama3.1:8b` si falta
-4. Instalar globalmente los servidores MCP comunes
-5. Generar `mcp-servers.json` y `.env.example` (si no existen)
-6. Mostrar pasos siguientes
+This script will:
 
-Si la instalación automática de Ollama falla (por falta de winget o permisos), instálalo manualmente desde https://ollama.com/download y vuelve a ejecutar el script.
+1. Install Ollama (winget / brew / official script) if missing
+2. Verify/start the Ollama service
+3. Pull the base model `llama3.1:8b` if absent
+4. Install common MCP servers globally
+5. Generate `mcp-servers.json` and `.env.example` (if missing)
+6. Show next steps
+
+If automatic Ollama installation fails (winget missing or permission issues), install it manually from <https://ollama.com/download> and re-run the script.
 
 ### 3. Build and Run
+
 ```bash
 # Development mode
 npm run dev
@@ -233,6 +236,7 @@ npm start
 ## 🔧 Configuration
 
 ### MCP Servers Configuration
+
 The application automatically configures MCP servers on first run. Configuration is stored in `mcp-servers.json`:
 
 ```json
@@ -253,6 +257,7 @@ The application automatically configures MCP servers on first run. Configuration
 ```
 
 ### Environment Variables (Optional)
+
 Create a `.env` file for additional configuration:
 ```env
 OLLAMA_BASE_URL=http://localhost:11434
@@ -262,49 +267,56 @@ BRAVE_API_KEY=your_brave_search_api_key
 ## 🎯 Usage
 
 ### Basic Chat
+
 1. Launch the application
 2. Select an Ollama model from the dropdown
 3. Type your message and press Enter or click Send
 4. Use the system prompt field to customize AI behavior
 
 ### Using MCP Tools
+
 When using a compatible model (llama3.1, qwen2.5, etc.), the AI can automatically use tools:
 
 #### Filesystem Operations
-```
+
+```text
 "List files in the current directory"
 "Read the content of package.json"
 "Create a new file called test.txt with some content"
 ```
 
 #### GitHub Integration
-```
+
+```text
 "Search for React repositories on GitHub"
 "Show me issues in the microsoft/vscode repository"
 "Create a new issue in my repository"
 ```
 
 #### Web Automation
-```
+
+```text
 "Take a screenshot of google.com"
 "Navigate to GitHub and extract the main navigation links"
 ```
 
 #### Memory System
-```
+
+```text
 "Remember that I prefer TypeScript over JavaScript"
 "What do you know about my preferences?"
 "Store this information: I work on web development projects"
 ```
 
 ### Tools Tab
+
 - View all available MCP tools and their status
 - Manually execute tools with custom parameters
 - Monitor tool execution results
 
 ## 🏗️ Project Structure
 
-```
+```text
 src/
 ├── main/                    # Electron main process
 │   └── electron-main.ts     # Main entry point, IPC handlers
@@ -353,12 +365,12 @@ npm run package:msi  # Build only MSI (Windows)
 
 ### Windows MSI Build Issues
 
-Si el build MSI falla:
+If the MSI build fails:
 
-- Asegura tener instalado **WiX Toolset v3.14+** (agrega sus binarios a PATH)
-- Ejecuta en PowerShell: `light.exe -?` para verificar
-- Usa: `npm run package:msi`
-- Limpia caché si hay artefactos corruptos: elimina `dist/` antes de reintentar
+- Ensure **WiX Toolset v3.14+** is installed (add its binaries to PATH)
+- Run in PowerShell: `light.exe -?` to verify
+- Use: `npm run package:msi`
+- Clear cache if artifacts look corrupted: remove `dist/` before retrying
 
 
 ### Common Issues

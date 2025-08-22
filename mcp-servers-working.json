@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "description": "Configuración de servidores MCP para Ollama Chat - Solo servidores funcionales",
+  "description": "MCP server configuration for Ollama Chat - Only functional servers",
   "servers": {
     "filesystem": {
       "type": "stdio",
@@ -9,7 +9,7 @@
         "@modelcontextprotocol/server-filesystem",
         "D:\\MyProjects\\ollama-chat"
       ],
-      "description": "Acceso seguro al sistema de archivos",
+  "description": "Secure file system access",
       "category": "core",
       "enabled": true
     },
@@ -19,7 +19,7 @@
       "args": [
         "@modelcontextprotocol/server-github"
       ],
-      "description": "Integración con GitHub (repos, issues, PRs)",
+  "description": "GitHub integration (repos, issues, PRs)",
       "category": "development",
       "enabled": true
     },
@@ -29,7 +29,7 @@
       "args": [
         "@modelcontextprotocol/server-puppeteer"
       ],
-      "description": "Automatización web con Puppeteer",
+  "description": "Web automation with Puppeteer",
       "category": "automation",
       "enabled": true
     },
@@ -39,7 +39,7 @@
       "args": [
         "@modelcontextprotocol/server-memory"
       ],
-      "description": "Sistema de memoria persistente",
+  "description": "Persistent memory system",
       "category": "core",
       "enabled": true
     },
@@ -49,7 +49,7 @@
       "args": [
         "@modelcontextprotocol/server-brave-search"
       ],
-      "description": "Búsqueda web con Brave Search API (requiere BRAVE_API_KEY)",
+  "description": "Web search using Brave Search API (requires BRAVE_API_KEY)",
       "category": "search",
       "enabled": false,
       "env": {

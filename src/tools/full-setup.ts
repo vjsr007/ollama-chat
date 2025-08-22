@@ -57,7 +57,7 @@ const mcpServers: Record<string, McpServerConfigEntry> = {
     type: 'stdio',
     command: 'npx',
     args: ['@modelcontextprotocol/server-brave-search'],
-    description: 'Búsqueda web con Brave Search API',
+  description: 'Web search using Brave Search API',
     category: 'search',
     enabled: false
   },
@@ -65,7 +65,7 @@ const mcpServers: Record<string, McpServerConfigEntry> = {
     type: 'stdio',
     command: 'npx',
     args: ['@modelcontextprotocol/server-github'],
-    description: 'Integración con GitHub (repos, issues, PRs)',
+  description: 'GitHub integration (repos, issues, PRs)',
     category: 'development',
     enabled: false
   },
@@ -73,7 +73,7 @@ const mcpServers: Record<string, McpServerConfigEntry> = {
     type: 'stdio',
     command: 'npx',
     args: ['@modelcontextprotocol/server-postgres'],
-    description: 'Conexión a bases de datos PostgreSQL',
+  description: 'PostgreSQL database connection',
     category: 'database',
     enabled: false
   },
@@ -81,7 +81,7 @@ const mcpServers: Record<string, McpServerConfigEntry> = {
     type: 'stdio',
     command: 'npx',
     args: ['@modelcontextprotocol/server-sqlite'],
-    description: 'Gestión de bases de datos SQLite',
+  description: 'SQLite database management',
     category: 'database',
     enabled: false
   },
@@ -89,7 +89,7 @@ const mcpServers: Record<string, McpServerConfigEntry> = {
     type: 'stdio',
     command: 'npx',
     args: ['@modelcontextprotocol/server-puppeteer'],
-    description: 'Automatización web con Puppeteer',
+  description: 'Web automation with Puppeteer',
     category: 'automation',
     enabled: false
   },
@@ -97,7 +97,7 @@ const mcpServers: Record<string, McpServerConfigEntry> = {
     type: 'stdio',
     command: 'npx',
     args: ['@modelcontextprotocol/server-memory'],
-    description: 'Sistema de memoria persistente',
+  description: 'Persistent memory system',
     category: 'core',
     enabled: false
   },
@@ -105,7 +105,7 @@ const mcpServers: Record<string, McpServerConfigEntry> = {
     type: 'stdio',
     command: 'npx',
     args: ['@modelcontextprotocol/server-docker'],
-    description: 'Gestión de contenedores Docker',
+  description: 'Docker container management',
     category: 'infrastructure',
     enabled: false
   },
@@ -113,7 +113,7 @@ const mcpServers: Record<string, McpServerConfigEntry> = {
     type: 'stdio',
     command: 'npx',
     args: ['@modelcontextprotocol/server-fetch'],
-    description: 'Cliente HTTP para APIs externas',
+  description: 'HTTP client for external APIs',
     category: 'network',
     enabled: false
   },
@@ -121,7 +121,7 @@ const mcpServers: Record<string, McpServerConfigEntry> = {
     type: 'stdio',
     command: 'npx',
     args: ['@modelcontextprotocol/server-git'],
-    description: 'Operaciones Git (status, commit, push)',
+  description: 'Git operations (status, commit, push)',
     category: 'development',
     enabled: false
   }
@@ -141,35 +141,35 @@ function commandExists(cmd: string): boolean {
 }
 
 function installOllamaIfNeeded() {
-  process.stdout.write('🔍 Verificando instalación de Ollama... ');
+  process.stdout.write('🔍 Checking Ollama installation... ');
   if (commandExists('ollama')) {
-    console.log('ya instalado');
+  console.log('already installed');
     return;
   }
-  console.log('no encontrado, instalando...');
+  console.log('not found, installing...');
 
   try {
     if (process.platform === 'win32') {
       if (!commandExists('winget')) {
-        console.error('❌ winget no está disponible. Instala Ollama manualmente desde https://ollama.com/download y vuelve a ejecutar este script.');
+  console.error('❌ winget is not available. Install Ollama manually from https://ollama.com/download and re-run this script.');
         return;
       }
-      console.log('⬇️ Instalando Ollama con winget...');
+  console.log('⬇️ Installing Ollama with winget...');
       execSync('winget install -e --id Ollama.Ollama --accept-source-agreements --accept-package-agreements', { stdio: 'inherit' });
     } else if (process.platform === 'darwin') {
       if (commandExists('brew')) {
-        console.log('⬇️ Instalando Ollama con Homebrew...');
+  console.log('⬇️ Installing Ollama with Homebrew...');
         execSync('brew install ollama', { stdio: 'inherit' });
       } else {
-        console.log('⬇️ Instalando Ollama con script oficial (curl)...');
+  console.log('⬇️ Installing Ollama using official script (curl)...');
         execSync('curl -fsSL https://ollama.com/install.sh | sh', { stdio: 'inherit', shell: '/bin/bash' });
       }
     } else {
-      console.log('⬇️ Instalando Ollama (Linux) con script oficial...');
+  console.log('⬇️ Installing Ollama (Linux) using official script...');
       execSync('curl -fsSL https://ollama.com/install.sh | sh', { stdio: 'inherit', shell: '/bin/bash' });
     }
   } catch (e) {
-    console.error('❌ Error instalando Ollama automáticamente. Instálalo manualmente y reintenta.', e);
+  console.error('❌ Error installing Ollama automatically. Install it manually and retry.', e);
   }
 }
 
@@ -178,10 +178,10 @@ function ensureOllamaRunning() {
     execSync('ollama list', { stdio: 'ignore' });
     return; // Works
   } catch {
-    console.log('💡 Iniciando servicio Ollama (background)...');
+  console.log('💡 Starting Ollama service (background)...');
     try {
       if (process.platform === 'win32') {
-        // Intento iniciar servicio Ollama (sin detached en spawnSync)
+  // Attempt to start Ollama service (no detached in spawnSync)
         spawnSync('ollama', ['serve'], { stdio: 'ignore' });
       } else {
         spawnSync('ollama', ['serve'], { stdio: 'ignore' });
@@ -189,35 +189,35 @@ function ensureOllamaRunning() {
       // Small wait
       setTimeout(() => {/* no-op wait */}, 2000);
     } catch (e) {
-      console.warn('⚠️ No se pudo iniciar Ollama automáticamente. Asegúrate de que esté ejecutándose.');
+  console.warn('⚠️ Could not start Ollama automatically. Ensure it is running.');
     }
   }
 }
 
 function ensureBaseModel() {
   const model = 'llama3.1:8b';
-  process.stdout.write(`🔍 Verificando modelo base ${model}... `);
+  process.stdout.write(`🔍 Checking base model ${model}... `);
   let listOutput = '';
   try {
     listOutput = execSync('ollama list').toString();
   } catch (e) {
-    console.warn('\n⚠️ No se pudo ejecutar "ollama list". ¿Está corriendo Ollama?');
+  console.warn('\n⚠️ Could not run "ollama list". Is Ollama running?');
     return;
   }
   if (listOutput.includes('llama3.1') || listOutput.includes('llama3.1:8b')) {
-    console.log('ya presente');
+  console.log('already present');
     return;
   }
-  console.log('no encontrado, descargando...');
+  console.log('not found, pulling...');
   try {
     execSync(`ollama pull ${model}`, { stdio: 'inherit' });
   } catch (e) {
-    console.error(`❌ Error descargando modelo ${model}. Puedes intentar manualmente: ollama pull ${model}`);
+  console.error(`❌ Error pulling model ${model}. You can try manually: ollama pull ${model}`);
   }
 }
 
 function installMcpPackages() {
-  console.log('\n🔧 Instalando paquetes MCP globales (si faltan)...');
+  console.log('\n🔧 Installing global MCP packages (if missing)...');
   for (const pkg of mcpPackages) {
     try {
       process.stdout.write(`  • ${pkg} ... `);
@@ -228,13 +228,13 @@ function installMcpPackages() {
         already = true;
       } catch { /* not installed */ }
       if (already) {
-        console.log('ya instalado');
+  console.log('already installed');
         continue;
       }
       execSync(`npm install -g ${pkg}`, { stdio: 'ignore' });
       console.log('OK');
     } catch (e) {
-      console.log('FALLO');
+  console.log('FAILED');
     }
   }
 }
@@ -243,11 +243,11 @@ async function writeMcpConfig() {
   const configPath = path.join(process.cwd(), 'mcp-servers.json');
   const config = {
     version: '1.0.0',
-    description: 'Configuración de servidores MCP para Ollama Chat (generado por full-setup)',
+  description: 'MCP server configuration for Ollama Chat (generated by full-setup)',
     servers: mcpServers
   };
   await fs.writeFile(configPath, JSON.stringify(config, null, 2));
-  console.log(`\n📄 Configuración MCP escrita: ${configPath}`);
+  console.log(`\n📄 MCP configuration written: ${configPath}`);
 }
 
 async function ensureEnvExample() {
@@ -255,14 +255,14 @@ async function ensureEnvExample() {
   try {
     await fs.access(envExample);
   } catch {
-    const template = `# Variables de entorno para Ollama Chat\nOLLAMA_BASE_URL=http://localhost:11434\nBRAVE_API_KEY=your_brave_search_api_key\nGITHUB_TOKEN=your_github_token\nPOSTGRES_CONNECTION_STRING=postgresql://user:password@localhost:5432/database\nMCP_LOG_LEVEL=info\nMCP_TIMEOUT=300000\nMCP_MAX_CONCURRENT_TOOLS=5\n`;
+  const template = `# Environment variables for Ollama Chat\nOLLAMA_BASE_URL=http://localhost:11434\nBRAVE_API_KEY=your_brave_search_api_key\nGITHUB_TOKEN=your_github_token\nPOSTGRES_CONNECTION_STRING=postgresql://user:password@localhost:5432/database\nMCP_LOG_LEVEL=info\nMCP_TIMEOUT=300000\nMCP_MAX_CONCURRENT_TOOLS=5\n`;
     await fs.writeFile(envExample, template);
-    console.log('🔐 .env.example creado');
+  console.log('🔐 .env.example created');
   }
 }
 
 async function main() {
-  console.log('🚀 Full Setup: Ollama + Modelo Base + MCP Servers\n');
+  console.log('🚀 Full Setup: Ollama + Base Model + MCP Servers\n');
   installOllamaIfNeeded();
   ensureOllamaRunning();
   ensureBaseModel();
@@ -270,22 +270,22 @@ async function main() {
   await writeMcpConfig();
   await ensureEnvExample();
 
-  console.log('\n✅ Setup completo finalizado');
-  console.log('\n📌 Siguientes pasos sugeridos:');
-  console.log('  1. Copia .env.example a .env y completa los tokens necesarios');
-  console.log('  2. Ejecuta: npm run dev   (modo desarrollo)');
-  console.log('     o      : npm start     (después de build)');
-  console.log('  3. Activa/enabled los servidores MCP que quieras desde la UI Tools');
-  console.log('  4. Envía un mensaje al modelo para probar tools con llama3.1:8b');
-  console.log('\n🔍 Verificación manual rápida (opcional):');
-  console.log('   ollama list            # Debe mostrar llama3.1:8b');
+  console.log('\n✅ Setup completed');
+  console.log('\n📌 Suggested next steps:');
+  console.log('  1. Copy .env.example to .env and fill in required tokens');
+  console.log('  2. Run: npm run dev   (development mode)');
+  console.log('     or : npm start     (after build)');
+  console.log('  3. Enable the MCP servers you want from the Tools UI');
+  console.log('  4. Send a message to the model to test tools with llama3.1:8b');
+  console.log('\n🔍 Quick manual verification (optional):');
+  console.log('   ollama list            # Should show llama3.1:8b');
   console.log('   npm list -g | findstr "@modelcontextprotocol/server-filesystem"');
-  console.log('\n✨ ¡Listo!');
+  console.log('\n✨ Done!');
 }
 
 if (require.main === module) {
   main().catch(e => {
-    console.error('❌ Error en full-setup:', e);
+  console.error('❌ Error in full-setup:', e);
     process.exit(1);
   });
 }

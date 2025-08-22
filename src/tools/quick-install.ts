@@ -1,44 +1,44 @@
 #!/usr/bin/env ts-node
 
 /**
- * Script de instalación rápida para MCP
- * Instala solo los servidores MCP que funcionan correctamente
+ * Quick installation script for MCP
+ * Installs only the MCP servers we know work correctly
  */
 
 import { execSync } from 'child_process';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
-// Solo los servidores que sabemos que funcionan
+// Only the servers we know are stable
 const workingMcpServers = [
   '@modelcontextprotocol/server-filesystem',
   '@modelcontextprotocol/server-memory'
 ];
 
 async function quickInstall() {
-  console.log('🚀 Instalación rápida MCP para Ollama Chat\n');
+  console.log('🚀 Quick MCP installation for Ollama Chat\n');
   
-  // 1. Instalar solo servidores que funcionan
-  console.log('📦 Instalando servidores MCP verificados...\n');
+  // 1. Install only working servers
+  console.log('📦 Installing verified MCP servers...\n');
   
   for (const pkg of workingMcpServers) {
     try {
-      console.log(`⬇️ Instalando ${pkg}...`);
+  console.log(`⬇️ Installing ${pkg}...`);
       execSync(`npm install -g ${pkg}`, { stdio: 'inherit' });
-      console.log(`✅ ${pkg} instalado\n`);
+  console.log(`✅ ${pkg} installed\n`);
     } catch (error) {
-      console.error(`❌ Error instalando ${pkg}`);
+  console.error(`❌ Error installing ${pkg}`);
     }
   }
   
-  // 2. Crear configuración simplificada
+  // 2. Create simplified configuration
   const quickConfig = {
     version: '1.0.0',
-    description: 'Configuración MCP rápida y funcional',
+  description: 'Quick and functional MCP configuration',
     builtin_tools: {
       filesystem: {
         enabled: true,
-        description: 'Herramientas de archivos integradas',
+  description: 'Built-in filesystem tools',
         tools: ['list_dir', 'read_file', 'write_file', 'path_info']
       }
     },
@@ -47,19 +47,19 @@ async function quickInstall() {
         type: 'stdio',
         command: 'npx',
         args: ['@modelcontextprotocol/server-filesystem', process.cwd()],
-        description: 'Servidor de archivos externo',
+  description: 'External filesystem server',
         category: 'core',
         enabled: false,
-        status: 'Requiere npx configurado'
+  status: 'Requires npx available'
       },
       'memory': {
         type: 'stdio', 
         command: 'npx',
         args: ['@modelcontextprotocol/server-memory'],
-        description: 'Sistema de memoria persistente',
+  description: 'Persistent memory system',
         category: 'core',
         enabled: false,
-        status: 'Requiere npx configurado'
+  status: 'Requires npx available'
       }
     },
     setup_complete: true
@@ -70,31 +70,31 @@ async function quickInstall() {
     JSON.stringify(quickConfig, null, 2)
   );
   
-  // 3. Crear archivo .env si no existe
+  // 3. Create .env file if missing
   const envPath = path.join(process.cwd(), '.env');
   try {
     await fs.access(envPath);
-    console.log('📋 Archivo .env ya existe');
+  console.log('.env file already exists');
   } catch {
     await fs.copyFile('.env.example', '.env');
-    console.log('📋 Archivo .env creado desde plantilla');
+  console.log('.env file created from template');
   }
   
-  console.log('\n✨ Instalación rápida completada!');
-  console.log('\n📋 Resumen:');
-  console.log('✅ Herramientas integradas: Filesystem (list_dir, read_file, write_file, path_info)');
-  console.log('✅ Servidores globales: filesystem, memory');
-  console.log('✅ Configuración: mcp-quick-config.json');
-  console.log('✅ Variables de entorno: .env');
+  console.log('\n✨ Quick installation completed!');
+  console.log('\n📋 Summary:');
+  console.log('✅ Built-in tools: Filesystem (list_dir, read_file, write_file, path_info)');
+  console.log('✅ Global servers: filesystem, memory');
+  console.log('✅ Configuration file: mcp-quick-config.json');
+  console.log('✅ Environment variables: .env');
   
-  console.log('\n🎯 Próximos pasos:');
-  console.log('1. npm start - Iniciar la aplicación');
-  console.log('2. Ir a la pestaña "Tools" en la aplicación');
-  console.log('3. Usar las herramientas integradas (no requieren configuración)');
-  console.log('4. Opcionalmente, agregar servidores externos desde la UI');
+  console.log('\n🎯 Next steps:');
+  console.log('1. npm start - Launch the application');
+  console.log('2. Go to the "Tools" tab in the app');
+  console.log('3. Use the built-in tools (no extra setup required)');
+  console.log('4. Optionally add external servers from the UI');
   
-  console.log('\n💡 Tip: Las herramientas integradas funcionan inmediatamente,');
-  console.log('    los servidores externos requieren configuración adicional.');
+  console.log('\n💡 Tip: Built-in tools work immediately,');
+  console.log('    external servers may require additional configuration.');
 }
 
 if (require.main === module) {

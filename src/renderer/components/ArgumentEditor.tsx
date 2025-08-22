@@ -27,7 +27,7 @@ const ArgumentEditor: React.FC<ArgumentEditorProps> = ({
   const [jsonMode, setJsonMode] = useState(false);
   const [jsonError, setJsonError] = useState('');
 
-  // Detectar automáticamente si debería estar en modo JSON
+  // Auto-detect if JSON mode should be enabled
   useEffect(() => {
     if (argDef.type === 'object' || argDef.type === 'array') {
       setJsonMode(true);
@@ -46,7 +46,7 @@ const ArgumentEditor: React.FC<ArgumentEditorProps> = ({
       onChange(parsed);
       setJsonError('');
     } catch (error) {
-      setJsonError('JSON inválido');
+  setJsonError('Invalid JSON');
     }
   };
 
@@ -55,17 +55,17 @@ const ArgumentEditor: React.FC<ArgumentEditorProps> = ({
     
     switch (argDef.type) {
       case 'string':
-        return 'Ingrese texto...';
+  return 'Enter text...';
       case 'number':
-        return 'Ingrese número...';
+  return 'Enter number...';
       case 'boolean':
-        return 'true o false';
+  return 'true or false';
       case 'array':
         return '["item1", "item2"]';
       case 'object':
         return '{"key": "value"}';
       default:
-        return 'Ingrese valor...';
+  return 'Enter value...';
     }
   };
 
@@ -87,17 +87,17 @@ const ArgumentEditor: React.FC<ArgumentEditorProps> = ({
   };
 
   const renderInput = () => {
-    // Si tiene enum, mostrar select
+  // If enum present, render select
     if (argDef.enum && argDef.enum.length > 0) {
       return (
         <select
           value={value || ''}
           onChange={(e) => onChange(e.target.value)}
           className="arg-select"
-          title={`Seleccionar valor para ${argName}`}
-          aria-label={`Seleccionar valor para ${argName}`}
+          title={`Select value for ${argName}`}
+          aria-label={`Select value for ${argName}`}
         >
-          <option value="">-- Seleccionar --</option>
+          <option value="">-- Select --</option>
           {argDef.enum.map(option => (
             <option key={option} value={option}>
               {option}
@@ -107,7 +107,7 @@ const ArgumentEditor: React.FC<ArgumentEditorProps> = ({
       );
     }
 
-    // Boolean como checkbox
+  // Boolean as checkbox
     if (argDef.type === 'boolean' && !jsonMode) {
       return (
         <div className="arg-boolean">
@@ -118,13 +118,13 @@ const ArgumentEditor: React.FC<ArgumentEditorProps> = ({
               onChange={(e) => onChange(e.target.checked)}
             />
             <span className="checkbox-custom"></span>
-            {value ? 'Verdadero' : 'Falso'}
+            {value ? 'True' : 'False'}
           </label>
         </div>
       );
     }
 
-    // Number como input number
+  // Number as input number
     if (argDef.type === 'number' && !jsonMode) {
       return (
         <input
@@ -140,7 +140,7 @@ const ArgumentEditor: React.FC<ArgumentEditorProps> = ({
       );
     }
 
-    // String simple
+  // Simple string
     if (argDef.type === 'string' && !jsonMode) {
       return (
         <input
@@ -153,7 +153,7 @@ const ArgumentEditor: React.FC<ArgumentEditorProps> = ({
       );
     }
 
-    // JSON mode para tipos complejos o cuando se activa manualmente
+  // JSON mode for complex types or when manually activated
     return (
       <div className="arg-json-container">
         <textarea
@@ -184,7 +184,7 @@ const ArgumentEditor: React.FC<ArgumentEditorProps> = ({
               type="button"
               onClick={() => setJsonMode(!jsonMode)}
               className={`mode-toggle ${jsonMode ? 'active' : ''}`}
-              title={jsonMode ? 'Cambiar a modo simple' : 'Cambiar a modo JSON'}
+              title={jsonMode ? 'Switch to simple mode' : 'Switch to JSON mode'}
             >
               {jsonMode ? '📝' : '{ }'}
             </button>
@@ -195,7 +195,7 @@ const ArgumentEditor: React.FC<ArgumentEditorProps> = ({
               type="button"
               onClick={() => onChange(argDef.default)}
               className="default-btn"
-              title="Usar valor por defecto"
+              title="Use default value"
             >
               ↺
             </button>
@@ -205,7 +205,7 @@ const ArgumentEditor: React.FC<ArgumentEditorProps> = ({
             type="button"
             onClick={() => onChange(undefined)}
             className="clear-btn"
-            title="Limpiar valor"
+            title="Clear value"
           >
             ✕
           </button>

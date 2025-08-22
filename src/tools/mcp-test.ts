@@ -2,20 +2,20 @@
 
 /**
  * MCP Test Tool
- * Prueba la conectividad con servidores MCP
+ * Tests connectivity with MCP servers
  */
 
 import { spawn } from 'child_process';
 
 async function testMcpServer(name: string, command: string, args: string[]) {
-  console.log(`🧪 Probando servidor MCP: ${name}`);
+  console.log(`🧪 Testing MCP server: ${name}`);
   
   try {
     const child = spawn(command, args, {
       stdio: ['pipe', 'pipe', 'pipe']
     });
     
-    // Enviar solicitud de inicialización
+  // Send initialization request
     const initRequest = {
       jsonrpc: '2.0',
       id: 1,
@@ -51,23 +51,23 @@ async function testMcpServer(name: string, command: string, args: string[]) {
       child.on('exit', (code) => {
         clearTimeout(timeout);
         if (code === 0 || output.includes('jsonrpc')) {
-          console.log(`✅ ${name} responde correctamente`);
+          console.log(`✅ ${name} responds correctly`);
           resolve(true);
         } else {
-          console.log(`❌ ${name} no responde (código: ${code})`);
+          console.log(`❌ ${name} not responding (code: ${code})`);
           resolve(false);
         }
       });
     });
     
   } catch (error) {
-    console.error(`❌ Error probando ${name}:`, error);
+  console.error(`❌ Error testing ${name}:`, error);
     return false;
   }
 }
 
 async function main() {
-  console.log('🔍 Probando servidores MCP disponibles...\n');
+  console.log('🔍 Testing available MCP servers...\n');
   
   const servers = [
     { name: 'filesystem', command: 'npx', args: ['@modelcontextprotocol/server-filesystem', '.'] },
@@ -80,7 +80,7 @@ async function main() {
     console.log();
   }
   
-  console.log('✨ Pruebas completadas');
+  console.log('✨ Tests completed');
 }
 
 if (require.main === module) {

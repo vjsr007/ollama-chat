@@ -1,10 +1,10 @@
 {
   "version": "1.0.0",
-  "description": "Configuración MCP simplificada para Ollama Chat",
+  "description": "Simplified MCP configuration for Ollama Chat",
   "builtin_tools": {
     "filesystem": {
       "enabled": true,
-      "description": "Herramientas de sistema de archivos integradas",
+  "description": "Built-in file system tools",
       "tools": ["list_dir", "read_file", "write_file", "path_info"]
     }
   },
@@ -13,7 +13,7 @@
       "type": "stdio",
       "command": "node",
       "args": ["-e", "console.log('MCP Server demo')"],
-      "description": "Servidor de archivos externo",
+  "description": "External file server",
       "category": "core",
       "enabled": false
     }

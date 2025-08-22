@@ -16,7 +16,9 @@ export const mcpApi = {
   startServer: (id: string) => ipcRenderer.invoke('mcp:start-server', id),
   stopServer: (id: string) => ipcRenderer.invoke('mcp:stop-server', id),
   removeServer: (id: string) => ipcRenderer.invoke('mcp:remove-server', id),
-  getServerTools: (serverId: string) => ipcRenderer.invoke('mcp:get-server-tools', serverId)
+  getServerTools: (serverId: string) => ipcRenderer.invoke('mcp:get-server-tools', serverId),
+  reloadConfig: () => ipcRenderer.invoke('mcp:reload-config'),
+  getConfigPath: () => ipcRenderer.invoke('mcp:get-config-path')
 };
 
 export const electronApi = {

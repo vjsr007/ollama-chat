@@ -100,6 +100,16 @@
         "filter": [
           "**/*"
         ]
+      },
+      {
+        "from": ".",
+        "to": "config",
+        "filter": [
+          "mcp-servers.json",
+          "mcp-servers-working.json",
+          "mcp-servers-backup.json",
+          "mcp-config-simple.json"
+        ]
       }
     ],
     "win": {

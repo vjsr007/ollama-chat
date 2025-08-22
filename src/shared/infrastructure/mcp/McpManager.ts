@@ -58,6 +58,20 @@ export class McpManager extends EventEmitter {
     this.projectRoot = projectRoot || process.cwd();
   }
 
+  // Clear all registered external MCP servers (builtin tools remain)
+  clearServers(): void {
+    // Builtin tools are stored separately; just clear server map
+    this.servers.clear();
+  }
+
+  // Reload configuration from disk (used by UI reload button)
+  async reloadConfiguration(projectRoot: string = process.cwd()): Promise<void> {
+    console.log('🔄 Reloading MCP configuration...');
+    this.clearServers();
+    await this.loadDefaultConfiguration(projectRoot);
+    console.log('✅ Reload complete. Servers count:', this.servers.size);
+  }
+
   // Built-in tools implementation
   async callBuiltinTool(toolName: string, args: Record<string, any>): Promise<BuiltinToolResult> {
     const startTime = Date.now();
@@ -758,7 +772,29 @@ export class McpManager extends EventEmitter {
     try {
       console.log('🔍 Searching for MCP configuration in:', projectRoot);
       
-      // Search for configuration files in order of preference
+      // Search for configuration files in order of preference.
+      // When packaged with electron-builder on Windows (MSI / NSIS), extraResources are placed under
+      //   <installRoot>/resources/app/config
+      // so we add those paths as fallbacks.
+      const resourceRootCandidates: string[] = [];
+      try {
+        // __dirname resolution will differ between dev (src/...) and prod (dist/...)
+        const possibleAppRoots = [
+          projectRoot,
+          path.join(process.cwd(), 'config'),
+          path.join(process.cwd(), 'resources', 'app', 'config'),
+          path.join(__dirname, '..', '..', '..', 'config'),
+          // When packaged: resources/config (extraResources target) & resources/app/config (if ever used)
+          (process as any).resourcesPath ? path.join((process as any).resourcesPath, 'config') : undefined,
+          (process as any).resourcesPath ? path.join((process as any).resourcesPath, 'app', 'config') : undefined
+        ];
+        for (const p of possibleAppRoots) {
+          if (p && !resourceRootCandidates.includes(p)) resourceRootCandidates.push(p);
+        }
+      } catch {
+        // ignore
+      }
+
       const configFiles = [
         'mcp-servers.json',
         'mcp-config-simple.json',
@@ -768,13 +804,13 @@ export class McpManager extends EventEmitter {
       let configLoaded = false;
       
       for (const configFile of configFiles) {
-        try {
-          const configPath = path.join(projectRoot, configFile);
-          console.log('📂 Checking configuration file:', configPath);
-          
-          const configContent = await fs.readFile(configPath, 'utf-8');
-          const config = JSON.parse(configContent);
-          console.log('✅ Configuration file found and parsed:', configFile);
+        for (const root of resourceRootCandidates) {
+          try {
+            const configPath = path.join(root, configFile);
+            console.log('📂 Checking configuration file:', configPath);
+            const configContent = await fs.readFile(configPath, 'utf-8');
+            const config = JSON.parse(configContent);
+            console.log('✅ Configuration file found and parsed:', configFile, 'at', root);
           
           // Load servers from mcp-servers.json file
           if (config.servers) {
@@ -852,11 +888,13 @@ export class McpManager extends EventEmitter {
             break;
           }
           
-        } catch (error) {
-          // File doesn't exist or parsing error, continue with next
-          console.log('❌ Could not load configuration file:', configFile, error instanceof Error ? error.message : error);
-          continue;
+          } catch (error) {
+            // File doesn't exist or parsing error, continue with next root
+            console.log('❌ Could not load configuration file:', configFile, 'at', root, '-', error instanceof Error ? error.message : error);
+            continue;
+          }
         }
+        if (configLoaded) break; // break outer loop if loaded
       }
       
       if (!configLoaded) {

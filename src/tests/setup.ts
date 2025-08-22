@@ -1,10 +1,10 @@
 import '@types/jest';
 
 /**
- * Configuración global para Jest
+ * Global Jest configuration
  */
 
-// Mock de Electron para tests
+// Electron mock for tests
 jest.mock('electron', () => ({
   app: {
     getPath: jest.fn(() => '/mock/path'),
@@ -28,7 +28,7 @@ jest.mock('electron', () => ({
   },
 }));
 
-// Mock de APIs del navegador para componentes React
+// Browser API mocks for React components
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
   value: jest.fn().mockImplementation(query => ({

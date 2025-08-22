@@ -1,4 +1,4 @@
-// Test para verificar la detección de JSON en resultados de herramientas
+// Test to verify JSON detection in tool results
 const testContent = `SYSTEM
 
 Tool executed: puppeteer_screenshot
@@ -14,7 +14,7 @@ Result: [
 }
 ]`;
 
-// Función de detección mejorada
+// Improved detection function
 const hasJsonContent = (text) => {
   const jsonPatterns = [
     /```json/i,

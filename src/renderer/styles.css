@@ -154,6 +154,28 @@ textarea::placeholder { color:#667386; }
   margin: 0 auto;
 }
 
+/* MCP config actions */
+.config-actions-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+  align-items: center;
+}
+
+.config-path-label {
+  font-size: 11px;
+  opacity: 0.75;
+  font-family: 'Consolas','Monaco',monospace;
+  background: rgba(255,255,255,0.08);
+  padding: 4px 8px;
+  border-radius: 6px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .mcp-section {
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);

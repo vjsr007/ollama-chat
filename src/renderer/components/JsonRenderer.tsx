@@ -32,7 +32,7 @@ const JsonRenderer: React.FC<JsonRendererProps> = ({
   const isImageData = (value: string): boolean => {
     if (typeof value !== 'string') return false;
     
-    // Detectar diferentes formatos de imagen
+  // Detect different image formats
     const imagePatterns = [
       /^data:image\/(png|jpeg|jpg|gif|webp|svg\+xml);base64,/i,
       /^iVBORw0KGgo/, // PNG signature
@@ -46,10 +46,10 @@ const JsonRenderer: React.FC<JsonRendererProps> = ({
 
   const formatImageData = (value: string): string => {
     if (value.startsWith('data:image/')) {
-      return value; // Ya tiene el prefijo data URI
+  return value; // Already has data URI prefix
     }
     
-    // Detectar formato y agregar prefijo apropiado
+  // Detect format and add appropriate prefix
     if (value.startsWith('iVBORw0KGgo')) {
       return `data:image/png;base64,${value}`;
     } else if (value.startsWith('/9j/')) {
@@ -80,7 +80,7 @@ const JsonRenderer: React.FC<JsonRendererProps> = ({
     }
 
     if (typeof value === 'string') {
-      // Verificar si es una imagen
+  // Check if value is an image
       if (isImageData(value)) {
         const imageKey = `${fullPath}_image`;
         const hasError = imageErrors.has(imageKey);
@@ -112,7 +112,7 @@ const JsonRenderer: React.FC<JsonRendererProps> = ({
               </div>
             </div>
             <details className="json-image-raw">
-              <summary>Ver datos raw</summary>
+              <summary>View raw data</summary>
               <span className="json-string">"{value.substring(0, 200)}..."</span>
             </details>
           </div>

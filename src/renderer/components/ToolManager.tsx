@@ -15,7 +15,7 @@ interface ToolManagerProps {
   currentModel: string;
 }
 
-// Extender el tipo Window para incluir electronAPI
+// Extend Window type to include electronAPI
 declare global {
   interface Window {
     electronAPI: {
@@ -36,7 +36,7 @@ const ToolManager: React.FC<ToolManagerProps> = ({ isOpen, onClose, currentModel
   const [modelLimits, setModelLimits] = useState<{ [key: string]: number }>({});
   const [currentLimit, setCurrentLimit] = useState(25);
 
-  // Límites por defecto para diferentes modelos
+  // Default limits for different models
   const defaultLimits: { [key: string]: number } = {
     'qwen2.5:latest': 25,
     'llama3.1:8b': 20,
@@ -50,7 +50,7 @@ const ToolManager: React.FC<ToolManagerProps> = ({ isOpen, onClose, currentModel
     if (isOpen) {
       loadTools();
       loadModelLimits();
-      // Recargar los límites cada vez que cambie el modelo
+  // Reload limits whenever the model changes
       if (currentModel) {
         loadCurrentModelLimit();
       }
@@ -108,7 +108,7 @@ const ToolManager: React.FC<ToolManagerProps> = ({ isOpen, onClose, currentModel
   };
 
   const saveModelLimits = async (limits: { [key: string]: number }) => {
-    // Guardar en backend
+  // Save to backend
     try {
       await window.electronAPI.setModelLimit(currentModel, limits[currentModel]);
       setModelLimits(limits);
@@ -144,7 +144,7 @@ const ToolManager: React.FC<ToolManagerProps> = ({ isOpen, onClose, currentModel
     
     setTools(updatedTools);
     
-    // Guardar en el backend
+  // Save to backend
     try {
       await window.electronAPI.updateToolStatus(toolName, !tools.find(t => t.name === toolName)?.enabled);
     } catch (error) {
@@ -162,7 +162,7 @@ const ToolManager: React.FC<ToolManagerProps> = ({ isOpen, onClose, currentModel
     const updatedTools = tools.map(tool => ({ ...tool, enabled: true }));
     setTools(updatedTools);
     
-    // Guardar cada cambio en el backend
+  // Persist each change to backend
     try {
       await Promise.all(
         updatedTools.map(tool => window.electronAPI.updateToolStatus(tool.name, true))
@@ -176,7 +176,7 @@ const ToolManager: React.FC<ToolManagerProps> = ({ isOpen, onClose, currentModel
     const updatedTools = tools.map(tool => ({ ...tool, enabled: false }));
     setTools(updatedTools);
     
-    // Guardar cada cambio en el backend
+  // Persist each change to backend
     try {
       await Promise.all(
         updatedTools.map(tool => window.electronAPI.updateToolStatus(tool.name, false))
@@ -192,7 +192,7 @@ const ToolManager: React.FC<ToolManagerProps> = ({ isOpen, onClose, currentModel
     );
     setTools(updatedTools);
     
-    // Guardar cambios en el backend solo para herramientas de la categoría
+  // Save changes in backend only for tools in the category
     try {
       const categoryTools = updatedTools.filter(t => t.category === category);
       await Promise.all(

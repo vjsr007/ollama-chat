@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import path from 'path';
+import fs from 'fs';
 import { McpManager } from '../shared/infrastructure/mcp/McpManager';
 import ToolConfigManager from './tool-config';
 import { ExternalModelManager } from './external-models';
@@ -358,6 +359,39 @@ ipcMain.handle('mcp:get-server-tools', async (event, serverId) => {
   } catch (error) {
     console.error('❌ Main: Error fetching server tools:', error);
     throw error;
+  }
+});
+
+// Reload MCP configuration
+ipcMain.handle('mcp:reload-config', async () => {
+  console.log('🔄 Main: Reloading MCP configuration via IPC');
+  try {
+    const projectRoot = path.join(__dirname, '..', '..', '..');
+    await mcpManager.reloadConfiguration(projectRoot);
+    return { success: true, servers: mcpManager.getServers() };
+  } catch (error) {
+    console.error('❌ Main: Error reloading MCP configuration:', error);
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+// Open config folder path (returns path so renderer can show / copy)
+ipcMain.handle('mcp:get-config-path', async () => {
+  try {
+    // Determine where config was packaged
+    const candidates = [
+      path.join(process.cwd(), 'config'),
+      path.join(__dirname, '..', '..', '..', 'config'),
+      (process as any).resourcesPath ? path.join((process as any).resourcesPath, 'config') : undefined
+    ].filter(Boolean) as string[];
+    for (const c of candidates) {
+      if (fs.existsSync(c)) {
+        return { success: true, path: c };
+      }
+    }
+    return { success: false, error: 'Config folder not found' };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
   }
 });
 

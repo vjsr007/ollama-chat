@@ -103,5 +103,26 @@
       "category": "development",
       "enabled": false
     }
+    ,
+    "system-access": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "unsafe-servers/system-access-server.js"
+      ],
+      "description": "DANGEROUS: Full system access (files, processes, commands). Disabled by default.",
+      "category": "dangerous",
+      "enabled": false
+    },
+    "process-control": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "unsafe-servers/process-control-server.js"
+      ],
+      "description": "DANGEROUS: Process & service management (start/kill/list). Disabled by default.",
+      "category": "dangerous",
+      "enabled": false
+    }
   }
 }

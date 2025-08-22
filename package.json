@@ -4,7 +4,7 @@
   "private": true,
   "description": "Local ChatGPT-style chat application with Electron and Ollama model support (text and vision) plus MCP integration",
   "main": "dist/main/main/electron-main.js",
-  "author": "",
+  "author": "OllamaChat",
   "license": "MIT",
   "scripts": {
     "dev": "concurrently \"npm:dev:main\" \"npm:dev:renderer\"",
@@ -17,6 +17,11 @@
     "build:main": "tsc -p tsconfig.main.json",
     "start": "electron .",
     "package": "npm run build && electron-builder",
+    "prepackage:msi": "node scripts/generate-icon.js",
+    "prepackage:win": "node scripts/generate-icon.js",
+    "package:win": "npm run prepackage:win && npm run build && electron-builder --win",
+    "package:msi": "npm run prepackage:msi && npm run build && electron-builder --win msi",
+    "package:msi:simple": "npm run prepackage:msi && npm run build && set EB_MAX_THREADS=1 && electron-builder --win msi",
     "lint": "eslint \"src/**/*.{ts,tsx}\" --max-warnings=0",
     "lint:fix": "eslint \"src/**/*.{ts,tsx}\" --fix",
     "format": "prettier --write \"src/**/*.{ts,tsx,json,css}\"",
@@ -27,7 +32,8 @@
     "test:coverage": "jest --coverage",
     "mcp:setup": "ts-node src/tools/mcp-setup.ts",
     "mcp:test": "ts-node src/tools/mcp-test.ts",
-    "mcp:quick": "npx ts-node --project tsconfig.tools.json src/tools/quick-install.ts"
+    "mcp:quick": "npx ts-node --project tsconfig.tools.json src/tools/quick-install.ts",
+    "setup:full": "npx ts-node --project tsconfig.tools.json src/tools/full-setup.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.17.3",
@@ -74,10 +80,15 @@
     "ts-jest": "^29.1.2",
     "ts-node": "^10.9.2",
     "typescript": "^5.4.5",
-    "vite": "^5.2.0"
+    "vite": "^5.2.0",
+    "png-to-ico": "^2.1.5",
+    "pngjs": "^7.0.0"
   },
   "build": {
+    "productName": "OllamaChat",
     "appId": "com.example.ollamachat",
+    "asar": true,
+    "compression": "store",
     "files": [
       "dist/**/*",
       "package.json"
@@ -93,16 +104,29 @@
     ],
     "win": {
       "target": [
-        "nsis"
+        "nsis",
+        "msi"
       ],
-      "icon": "assets/icon.png"
+      "icon": "assets/icon.ico",
+      "artifactName": "${productName}-Setup-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "Ollama Chat",
+      "uninstallDisplayName": "Ollama Chat"
+    },
+    "msi": {
+      "shortcutName": "Ollama Chat",
+      "perMachine": false
     },
     "linux": {
       "target": [
         "AppImage",
         "deb"
       ],
-      "icon": "assets/icon.png",
       "category": "Utility"
     }
   }

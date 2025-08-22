@@ -203,6 +203,23 @@ npm install
 npm run mcp:setup
 ```
 
+### (Nuevo) Setup Automático Completo
+Si prefieres que el proyecto instale todo (Ollama, modelo base y servidores MCP) ejecuta:
+
+```bash
+npm run setup:full
+```
+
+Este script hará:
+1. Instalar Ollama (winget / brew / script oficial) si no está presente
+2. Verificar/iniciar el servicio de Ollama
+3. Descargar el modelo base `llama3.1:8b` si falta
+4. Instalar globalmente los servidores MCP comunes
+5. Generar `mcp-servers.json` y `.env.example` (si no existen)
+6. Mostrar pasos siguientes
+
+Si la instalación automática de Ollama falla (por falta de winget o permisos), instálalo manualmente desde https://ollama.com/download y vuelve a ejecutar el script.
+
 ### 3. Build and Run
 ```bash
 # Development mode
@@ -311,6 +328,7 @@ src/
 ## 🧪 Development
 
 ### Available Scripts
+
 ```bash
 npm run dev          # Development with hot reload
 npm run build        # Production build
@@ -319,9 +337,13 @@ npm run test         # Run tests
 npm run lint         # Lint code
 npm run format       # Format code with Prettier
 npm run mcp:setup    # Install MCP servers
+npm run setup:full   # Full auto setup (Ollama + model + MCP)
+npm run package:win  # Build Windows installers (NSIS + MSI)
+npm run package:msi  # Build only MSI (Windows)
 ```
 
 ### Development Workflow
+
 1. Run `npm run dev` for development with hot reload
 2. Use `npm run lint` to check code quality
 3. Run `npm test` for unit tests
@@ -329,24 +351,38 @@ npm run mcp:setup    # Install MCP servers
 
 ## 🐛 Troubleshooting
 
+### Windows MSI Build Issues
+
+Si el build MSI falla:
+
+- Asegura tener instalado **WiX Toolset v3.14+** (agrega sus binarios a PATH)
+- Ejecuta en PowerShell: `light.exe -?` para verificar
+- Usa: `npm run package:msi`
+- Limpia caché si hay artefactos corruptos: elimina `dist/` antes de reintentar
+
+
 ### Common Issues
 
 #### "Model does not support tools"
+
 - Your current model doesn't support function calling
 - Install a compatible model: `ollama pull llama3.1:8b`
 - The app will show a warning and work without tools
 
 #### MCP Servers not starting
+
 - Check that Node.js and npm are in your PATH
 - Ensure MCP packages are installed: `npm run mcp:setup`
 - Check console logs for specific error messages
 
 #### Ollama connection issues
+
 - Verify Ollama is running: `ollama list`
 - Check Ollama is accessible at `http://localhost:11434`
 - Restart Ollama service if needed
 
 #### Performance issues
+
 - Use smaller models (8b instead of 70b) for better performance
 - Limit the number of active MCP servers
 - Ensure sufficient RAM for your chosen model
@@ -365,6 +401,7 @@ npm run mcp:setup    # Install MCP servers
 ### Documentation Contributions
 
 #### Screenshots
+
 To contribute or update screenshots:
 
 1. Follow the [Screenshot Guide](./docs/SCREENSHOT_GUIDE.md)
@@ -374,6 +411,7 @@ To contribute or update screenshots:
 5. Update README links accordingly
 
 #### Video Demo
+
 To create or update the navigation video:
 
 1. Follow the [Video Creation Guide](./docs/VIDEO_GUIDE.md)
@@ -383,6 +421,7 @@ To create or update the navigation video:
 5. Consider uploading to YouTube for large files
 
 #### Documentation Standards
+
 - Use clear, concise language
 - Include practical examples
 - Test all provided code samples

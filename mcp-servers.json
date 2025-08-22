@@ -1,51 +1,17 @@
 {
   "version": "1.0.0",
-  "description": "MCP servers configuration for Ollama Chat - Functional servers only",
+  "description": "Configuración de servidores MCP para Ollama Chat (generado por full-setup)",
   "servers": {
     "filesystem": {
       "type": "stdio",
       "command": "npx",
       "args": [
         "@modelcontextprotocol/server-filesystem",
-        "C:\\"
+        "D:\\MyProjects\\ollama-chat"
       ],
-      "description": "Unrestricted file system access - full computer access",
+      "description": "Secure file system access",
       "category": "core",
-      "enabled": true,
-      "priority": 5,
-      "env": {
-        "MCP_FILESYSTEM_ALLOW_PARENT": "true"
-      }
-    },
-    "github": {
-      "type": "stdio",
-      "command": "npx",
-      "args": [
-        "@modelcontextprotocol/server-github"
-      ],
-      "description": "GitHub integration (repos, issues, PRs)",
-      "category": "development",
-      "enabled": true
-    },
-    "puppeteer": {
-      "type": "stdio",
-      "command": "npx",
-      "args": [
-        "@modelcontextprotocol/server-puppeteer"
-      ],
-      "description": "Web automation with Puppeteer",
-      "category": "automation",
-      "enabled": true
-    },
-    "memory": {
-      "type": "stdio",
-      "command": "npx",
-      "args": [
-        "@modelcontextprotocol/server-memory"
-      ],
-      "description": "Persistent memory system",
-      "category": "core",
-      "enabled": true
+      "enabled": false
     },
     "brave-search": {
       "type": "stdio",
@@ -53,70 +19,89 @@
       "args": [
         "@modelcontextprotocol/server-brave-search"
       ],
-      "description": "Web search with Brave Search API (requires BRAVE_API_KEY)",
+      "description": "Búsqueda web con Brave Search API",
       "category": "search",
-      "enabled": false,
-      "env": {
-        "BRAVE_API_KEY": ""
-      }
+      "enabled": false
     },
-    "copilot-terminal": {
+    "github": {
       "type": "stdio",
-      "command": "node",
+      "command": "npx",
       "args": [
-        "src/shared/infrastructure/mcp/servers/copilot-terminal-server.js"
+        "@modelcontextprotocol/server-github"
       ],
-      "description": "AI-powered terminal assistance with Copilot integration",
+      "description": "Integración con GitHub (repos, issues, PRs)",
       "category": "development",
-      "enabled": true,
-      "priority": 1,
-      "env": {
-        "NODE_ENV": "production",
-        "MAX_TERMINALS": "20",
-        "COMMAND_TIMEOUT": "30000"
-      }
+      "enabled": false
     },
-    "system-access": {
+    "postgres": {
       "type": "stdio",
-      "command": "node",
+      "command": "npx",
       "args": [
-        "src/shared/infrastructure/mcp/servers/system-access-server.js"
+        "@modelcontextprotocol/server-postgres"
       ],
-      "description": "Unrestricted system access - complete file system, command execution",
-      "category": "system",
-      "enabled": true,
-      "priority": 2,
-      "env": {
-        "UNRESTRICTED_ACCESS": "true"
-      }
+      "description": "Conexión a bases de datos PostgreSQL",
+      "category": "database",
+      "enabled": false
     },
-    "process-control": {
+    "sqlite": {
       "type": "stdio",
-      "command": "node",
+      "command": "npx",
       "args": [
-        "src/shared/infrastructure/mcp/servers/process-control-server.js"
+        "@modelcontextprotocol/server-sqlite"
       ],
-      "description": "Full process and service control - start, stop, monitor, manage",
-      "category": "system",
-      "enabled": true,
-      "priority": 3,
-      "env": {
-        "ADMIN_PRIVILEGES": "true"
-      }
+      "description": "Gestión de bases de datos SQLite",
+      "category": "database",
+      "enabled": false
     },
-    "hardware-access": {
+    "puppeteer": {
       "type": "stdio",
-      "command": "node",
+      "command": "npx",
       "args": [
-        "src/shared/infrastructure/mcp/servers/hardware-access-server.js"
+        "@modelcontextprotocol/server-puppeteer"
       ],
-      "description": "Hardware and device access - sensors, drivers, performance counters",
-      "category": "hardware",
-      "enabled": true,
-      "priority": 4,
-      "env": {
-        "HARDWARE_ACCESS": "unrestricted"
-      }
+      "description": "Automatización web con Puppeteer",
+      "category": "automation",
+      "enabled": false
+    },
+    "memory": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "@modelcontextprotocol/server-memory"
+      ],
+      "description": "Sistema de memoria persistente",
+      "category": "core",
+      "enabled": false
+    },
+    "docker": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "@modelcontextprotocol/server-docker"
+      ],
+      "description": "Gestión de contenedores Docker",
+      "category": "infrastructure",
+      "enabled": false
+    },
+    "fetch": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "@modelcontextprotocol/server-fetch"
+      ],
+      "description": "Cliente HTTP para APIs externas",
+      "category": "network",
+      "enabled": false
+    },
+    "git": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "@modelcontextprotocol/server-git"
+      ],
+      "description": "Operaciones Git (status, commit, push)",
+      "category": "development",
+      "enabled": false
     }
   }
 }

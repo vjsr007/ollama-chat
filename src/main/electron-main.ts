@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { McpManager } from '../shared/infrastructure/mcp/McpManager';
@@ -48,6 +48,9 @@ const mcpManager = new McpManager();
 const toolConfigManager = new ToolConfigManager();
 const externalModelManager = new ExternalModelManager();
 
+// Track last exported listing path for quick open
+let lastExportedListingPath: string | null = null;
+
 console.log('🏗️ Creating global instances completed');
 
 function createWindow(): void {
@@ -95,6 +98,18 @@ ipcMain.handle('chat', async (event, request) => {
   console.log('💬 Main: Request messages count:', request.messages?.length || 0);
   
   try {
+    // Quick intent intercept: open last exported file
+    const lastUserMsg = [...(request.messages||[])].reverse().find(m => m.role === 'user');
+    const userText = (lastUserMsg?.content || '').trim().toLowerCase();
+    if (lastExportedListingPath && userText && (/^abrir archivo$/.test(userText) || /^open file$/.test(userText))) {
+      console.log('⚡ Intercept: open last exported listing file:', lastExportedListingPath);
+      const result = await shell.openPath(lastExportedListingPath);
+      if (result) {
+        // Non-empty string = error per Electron docs
+        return `❌ No se pudo abrir el archivo: ${result}`;
+      }
+      return `Abierto: ${lastExportedListingPath}`;
+    }
     // Get all available tools
     const allTools = mcpManager.getAllTools();
     console.log('🛠️ Main: All available tools:', allTools.length);
@@ -111,7 +126,7 @@ ipcMain.handle('chat', async (event, request) => {
     // Add tools to request
     console.log('🎯 Tools available:', allTools.length, 'sending to Ollama:', enabledTools.length, '(max: 25)');
 
-    // Generate response
+    // Generate response (may include direct tool call shortcut)
     const result = await ollamaClient.generate(request, enabledTools);
     console.log('📈 Main: Generated result:', {
       needsToolExecution: result.needsToolExecution,
@@ -119,7 +134,7 @@ ipcMain.handle('chat', async (event, request) => {
       content: result.content?.substring(0, 100) + (result.content?.length > 100 ? '...' : '')
     });
 
-    // Execute tool calls if needed
+    // Execute tool calls if needed (including direct auto-detected export call where content may be empty)
     if (result.needsToolExecution && result.toolCalls) {
       console.log('🔧 Main: Executing tool calls:', result.toolCalls.length);
       
@@ -127,6 +142,13 @@ ipcMain.handle('chat', async (event, request) => {
       for (const toolCall of result.toolCalls) {
         try {
           console.log('🛠️ Main: Executing tool', toolCall.function.name, 'with args:', JSON.stringify(toolCall.function.arguments));
+          if (toolCall.function.name === 'system_export_directory_listing') {
+            const outPath = toolCall.function.arguments.output_path || toolCall.function.arguments.output_file_path || toolCall.function.arguments.destination_path || toolCall.function.arguments.dest_path || toolCall.function.arguments.target_path;
+            if (outPath) {
+              lastExportedListingPath = outPath;
+              console.log('💾 Stored lastExportedListingPath =', lastExportedListingPath);
+            }
+          }
           const toolResult = await mcpManager.callTool({
             tool: toolCall.function.name,
             args: toolCall.function.arguments,
@@ -146,21 +168,31 @@ ipcMain.handle('chat', async (event, request) => {
         }
       }
 
-      // Add tool results to messages and generate final response
-      const newMessages = [...request.messages, { role: 'assistant', content: result.content }, ...toolResults];
-      console.log('📨 Main: Sending follow-up request with tool results');
-      
-      const finalRequest = {
-        ...request,
-        messages: newMessages
-      };
+      // If original content is empty (direct tool call optimization), just return a concise success message from first tool
+      if (!result.content && toolResults.length === 1) {
+        try {
+          const parsed = JSON.parse(toolResults[0].content);
+          // Attempt to extract text from MCP content structure
+          const innerText = parsed?.result?.content?.[0]?.text || parsed?.content?.[0]?.text || JSON.stringify(parsed).slice(0,200);
+          return innerText || 'Tool executed.';
+        } catch {
+          return 'Tool executed.';
+        }
+      }
 
+      // Otherwise continue conversation: add tool results then re-query model
+      const newMessages = [...request.messages, { role: 'assistant', content: result.content || '' }, ...toolResults];
+      console.log('📨 Main: Sending follow-up request with tool results');
+      const finalRequest = { ...request, messages: newMessages };
       const finalResult = await ollamaClient.generate(finalRequest, enabledTools);
       console.log('🎉 Main: Final response generated successfully');
       return finalResult.content || '';
     }
-
-    return result.content || '';
+    // If no tool execution and content empty, create explicit placeholder to avoid UI generic empty warning
+    if (!result.content || !result.content.trim()) {
+      return '⚠️ (Modelo devolvió contenido vacío tras generación sin tools)';
+    }
+    return result.content;
   } catch (error) {
     console.error('💥 Main: Error executing tools:', error);
     throw error;

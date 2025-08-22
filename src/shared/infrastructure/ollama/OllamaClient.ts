@@ -35,10 +35,141 @@ export class OllamaClient {
     console.log(`📝 Messages count: ${req.messages.length}`);
     console.log(`🔧 Available tools: ${tools?.length || 0}`);
     
-    // Convert messages to format expected by Ollama /api/chat
-    const messages = await Promise.all(req.messages.map(m => this.mapMessage(m)));
-    console.log(`📨 Messages converted successfully`);
-    
+    // Helper: detect if tool usage likely needed from last user message
+    const lastUserMsg = [...req.messages].reverse().find(m => m.role === 'user');
+    const lastUserText = lastUserMsg?.content?.toLowerCase() || '';
+    const toolTriggerKeywords = [
+      'list', 'listar', 'lista', 'carpeta', 'carpetas', 'read', 'leer', 'file', 'archivo', 'dir', 'directory', 'directorio',
+      'process', 'proceso', 'kill', 'start', 'execute', 'exec', 'command', 'comando', 'service', 'servicio', 'network', 'netstat',
+      'port', 'puerto', 'system', 'sistema', 'crear', 'crea', 'export', 'exportar', 'txt'
+    ];
+    const userWantsExternalAction = toolTriggerKeywords.some(k => lastUserText.includes(k));
+
+    // Pattern: "crea un txt en C:\rutaSalida con la lista de carpetas en D:\rutaOrigen"
+    // We interpret this as an instruction to export a directory listing to a file.
+    let directExportToolCall: any | null = null;
+    try {
+      const exportRegex = /crea\s+un\s+txt\s+en\s+([a-z]:\\[^\s]+)\s+con\s+la\s+lista\s+de\s+carpetas\s+en\s+([a-z]:\\[^\s]+)/i;
+      const match = lastUserText.match(exportRegex);
+      if (match) {
+        let outputBase = match[1].replace(/"/g, '').trim();
+        let dirPath = match[2].replace(/"/g, '').trim();
+        // If outputBase appears to be a directory (no .txt extension), append default filename
+        if (!/\.txt$/i.test(outputBase)) {
+          if (!/[\\/]$/.test(outputBase)) outputBase += '\\';
+          outputBase += 'folders_list.txt';
+        }
+        // Normalize slashes to backslashes for Windows environment
+        outputBase = outputBase.replace(/\//g, '\\');
+        dirPath = dirPath.replace(/\//g, '\\');
+        directExportToolCall = {
+          needsToolExecution: true,
+            toolCalls: [
+              {
+                id: 'auto_system_export_directory_listing',
+                type: 'function',
+                function: {
+                  name: 'system_export_directory_listing',
+                  arguments: {
+                    dir_path: dirPath,
+                    output_path: outputBase,
+                    quiet: true
+                  }
+                }
+              }
+            ],
+            content: ''
+        } as any;
+        console.log('⚡ Detected direct export instruction. Auto-generating tool call:', JSON.stringify(directExportToolCall.toolCalls[0].function.arguments));
+      }
+    } catch (e) {
+      console.warn('⚠️ Error parsing export pattern:', e);
+    }
+
+    if (directExportToolCall) {
+      return directExportToolCall; // Skip model call; we can satisfy user directly
+    }
+
+    // Tool relevance scoring
+    const scoreTool = (tool: McpTool): number => {
+      if (!lastUserText) return 0;
+      const haystack = (tool.name + ' ' + (tool.description || '')).toLowerCase();
+      let score = 0;
+      for (const kw of toolTriggerKeywords) {
+        if (lastUserText.includes(kw) && haystack.includes(kw)) score += 3; // keyword overlap in both
+        else if (haystack.includes(kw)) score += 1; // generic capability
+      }
+      // Slight preference for system/process when explicit phrases
+      if (/process|service|port|network/.test(lastUserText) && /process|service|port|network/.test(haystack)) score += 2;
+      if (/file|directory|read|write|listar|archivo/.test(lastUserText) && /file|directory|read|write/.test(haystack)) score += 2;
+      return score;
+    };
+
+    // Dynamic system prompt insertion with tool guide
+    let systemInjected = false;
+    const existingSystem = req.messages.find(m => m.role === 'system');
+    let dynamicSystemPrompt = '';
+
+    // Prepare tool selection (filtered & summarized) only if model supports tools later
+    let selectedTools: McpTool[] = tools || [];
+    const maxToolsByModel = this.getMaxToolsForModel(req.model);
+    let relevanceApplied = false;
+    if (tools && tools.length) {
+      // Rank by relevance first
+      const withScores = tools.map(t => ({ t, s: scoreTool(t) }));
+      withScores.sort((a, b) => b.s - a.s);
+      const anyScorePositive = withScores.some(w => w.s > 0);
+      if (anyScorePositive) {
+        selectedTools = withScores.filter(w => w.s > 0).map(w => w.t);
+        relevanceApplied = true;
+      }
+      // Truncate to model limit
+      if (selectedTools.length > maxToolsByModel) {
+        selectedTools = selectedTools.slice(0, maxToolsByModel);
+      }
+    }
+
+    // Build tool summary lines (short descriptions)
+    const summarize = (tool: McpTool) => {
+      const d = (tool.description || '').replace(/\s+/g, ' ').trim();
+      return `${tool.name}: ${d.slice(0, 110)}${d.length > 110 ? '…' : ''}`;
+    };
+
+    if (!existingSystem && selectedTools.length) {
+      dynamicSystemPrompt = [
+        'You are an AI assistant with executable tool functions. ',
+        'When a user request requires external data, system inspection, file IO, process/service actions, directory listing, command execution, networking or similar, you MUST respond using a tool call instead of answering directly. ',
+        'If multiple tools could help, choose the single most relevant first. Ask clarifying questions ONLY if absolutely required to choose a safe tool. ',
+        'Return plain natural language ONLY when no tool adds value. ',
+        'Available tools (name: purpose):\n',
+        selectedTools.map(summarize).join('\n'),
+        '\nIf the user explicitly asks for system / process / file info, do not guess—invoke the proper tool.'
+      ].join('');
+      systemInjected = true;
+    } else if (existingSystem && selectedTools.length) {
+      // Add a secondary system message (lighter) guiding tool usage
+      dynamicSystemPrompt = [
+        '[TOOL-GUIDE] Tool usage policy: prefer tool calls for external/system actions. Available subset: ',
+        selectedTools.map(t => t.name).join(', ')
+      ].join('');
+    }
+
+    // Map messages (prepend dynamic system prompt if created)
+    const baseMessages: ChatMessage[] = systemInjected
+      ? ([{ role: 'system', content: dynamicSystemPrompt } as ChatMessage, ...req.messages])
+      : existingSystem
+        ? ([...req.messages, { role: 'system', content: dynamicSystemPrompt } as ChatMessage].filter(m => m.content) as ChatMessage[])
+        : req.messages;
+
+    const messages = await Promise.all(baseMessages.map(m => this.mapMessage(m)));
+    console.log(`� Messages converted successfully (systemInjected=${systemInjected}, dynamicGuide=${!!dynamicSystemPrompt})`);
+
+    console.log('🧠 Tool relevance applied:', relevanceApplied, '| Selected tools:', selectedTools.map(t => t.name).join(', ') || 'none');
+    if (relevanceApplied) {
+      selectedTools.forEach(t => console.log(`🔎 Relevance reason ${t.name}: score=${scoreTool(t)}`));
+    }
+    if (userWantsExternalAction) console.log('🧭 Heuristic: user likely expects external/system action');
+
     const payload: any = {
       model: req.model,
       messages,
@@ -49,20 +180,9 @@ export class OllamaClient {
     const supportsTools = await this.modelSupportsTools(req.model);
     console.log(`🎯 Model ${req.model} supports tools: ${supportsTools}`);
     
-    if (tools && tools.length > 0 && supportsTools) {
-      // Limit tools to prevent UI freezing with smaller models
-      const maxTools = this.getMaxToolsForModel(req.model);
-      
-      // Tools are already prioritized by MCP Manager, so we just slice the first maxTools
-      const limitedTools = tools.slice(0, maxTools);
-      
-      console.log(`🔧 Tools available: ${tools.length}, sending to Ollama: ${limitedTools.length} (max: ${maxTools})`);
-      
-      if (tools.length > maxTools) {
-        console.log(`ℹ️ Limited tools for model ${req.model} to prevent performance issues (terminal tools prioritized)`);
-      }
-      
-      payload.tools = limitedTools.map(tool => {
+    if (selectedTools && selectedTools.length > 0 && supportsTools) {
+      console.log(`🔧 Tools available: ${tools?.length || 0}, selected after relevance & limits: ${selectedTools.length} (model max: ${maxToolsByModel})`);
+      payload.tools = selectedTools.map(tool => {
         try {
           const schema = tool.schema || {};
           const requiredFields = Object.keys(schema).filter(key => schema[key] && schema[key].required) || [];
@@ -97,7 +217,7 @@ export class OllamaClient {
           };
         }
       });
-      console.log('🚀 Tools formatted for Ollama:', payload.tools.length);
+  console.log('🚀 Tools formatted for Ollama:', payload.tools.length);
     } else if (tools && tools.length > 0 && !supportsTools) {
       console.warn(`⚠️ Model ${req.model} does not support tools. Use llama3.1, qwen2.5, or another compatible model.`);
     }
@@ -107,7 +227,7 @@ export class OllamaClient {
     
     try {
       const startTime = Date.now();
-      const { data } = await axios.post(`${this.baseUrl}/api/chat`, payload, {
+  const { data } = await axios.post(`${this.baseUrl}/api/chat`, payload, {
         timeout: 300000, // 5 minute timeout
         headers: {
           'Content-Type': 'application/json'
@@ -140,8 +260,45 @@ export class OllamaClient {
         };
       }
       
-      const content = data.message?.content ?? '';
+      let content = data.message?.content ?? '';
       console.log('� Returning text response, content length:', content.length);
+
+      // If completely empty content and user likely wanted external action, attempt a forced retry
+      if (!content.trim() && supportsTools && userWantsExternalAction && selectedTools.length > 0) {
+        if ((req as any).__emptyRetryPerformed) {
+          console.log('⚠️ Empty response after retry; returning synthetic guidance.');
+          content = 'El modelo devolvió una respuesta vacía. Intenta de nuevo o especifica más detalle. Puedes volver a pedir: "exporta el listado del directorio usando system_export_directory_listing".';
+        } else {
+          console.log('♻️ Empty response detected. Performing forced retry with stronger system message.');
+          const retryReq: ChatRequest = {
+            ...req,
+            messages: [
+              ...req.messages,
+              { role: 'system', content: 'FORCE_TOOL_DECISION_EMPTY: La respuesta anterior estuvo vacía. Debes llamar a uno de los tools disponibles (' + selectedTools.map(t => t.name).join(', ') + ') si aplica.' }
+            ]
+          } as any;
+          (retryReq as any).__emptyRetryPerformed = true;
+          return await this.generate(retryReq, tools);
+        }
+      }
+
+      // Heuristic retry: user likely wanted external action but model ignored tools
+      if (!data.message?.tool_calls && supportsTools && userWantsExternalAction && selectedTools.length > 0 && !content.toLowerCase().includes('tool')) {
+        if ((req as any).__toolRetryPerformed) {
+          console.log('♻️ Heuristic retry already performed, not attempting again.');
+        } else {
+          console.log('⚠️ No tool calls returned; performing one heuristic retry with stronger system instruction.');
+          const strongerReq: ChatRequest = {
+            ...req,
+            messages: [
+              ...req.messages,
+              { role: 'system', content: 'FORCE_TOOL_DECISION: The previous response omitted tool usage. You MUST select and call the most relevant tool from: ' + selectedTools.map(t => t.name).join(', ') + '. Respond ONLY with a tool call if any tool is applicable.' }
+            ]
+          } as any;
+          (strongerReq as any).__toolRetryPerformed = true;
+          return await this.generate(strongerReq, tools); // recursive single retry
+        }
+      }
       return { needsToolExecution: false, content };
     } catch (error) {
       console.error('❌ Error calling Ollama API:', error);

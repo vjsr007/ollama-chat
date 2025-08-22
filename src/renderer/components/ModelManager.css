@@ -58,6 +58,22 @@
   transition: background 0.2s;
 }
 
+.inline-btn {
+  margin-left: 6px;
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  cursor: pointer;
+  background: var(--border-color, #333);
+  border: 1px solid var(--border-color, #333);
+  color: var(--text-color, #fff);
+  border-radius: 4px;
+}
+
+.inline-btn:hover {
+  background: var(--primary-color, #007acc);
+  border-color: var(--primary-color, #007acc);
+}
+
 .close-button:hover {
   background: rgba(255, 255, 255, 0.3);
 }
@@ -563,3 +579,26 @@
 .add-model-form {
   animation: fadeIn 0.2s ease-out;
 }
+.copilot-hint {
+  margin-bottom: 8px;
+  font-size: 0.85rem;
+  color: #6366f1;
+  background: #eef2ff;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid #c7d2fe;
+}
+
+.model-validation {
+  margin-top: 4px;
+  font-size: 0.7rem;
+  font-weight: 500;
+}
+.model-validation.status-valid { color: #059669; }
+.model-validation.status-invalid { color: #d97706; }
+.model-validation.status-error { color: #dc2626; }
+.model-controls .validate-btn {
+  background: #2563eb;
+  color: #fff;
+}
+.model-controls .validate-btn:hover { background: #1d4ed8; }

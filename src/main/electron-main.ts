@@ -554,20 +554,26 @@ ipcMain.handle('tools:get-enabled-for-model', async (event, modelName) => {
 
 // External models API handlers
 ipcMain.handle('external-models:get-all', async () => {
-  console.log('🌐 Main: Fetching all external models...');
+  console.log('🌐 Main: Fetching all external models (sanitized)...');
   try {
-    const models = await externalModelManager.getModels();
+    const models = await externalModelManager.getModelsSanitized();
     console.log('✅ Main: Retrieved', models.length, 'external models successfully');
-    return models;
+  return { success: true, models };
   } catch (error) {
     console.error('❌ Main: Error fetching external models:', error);
-    throw error;
+  return { success: false, models: [], error: error instanceof Error ? error.message : String(error) };
   }
 });
 
 ipcMain.handle('external-models:add', async (event, model) => {
   console.log('➕ Main: Adding external model:', model.name);
   try {
+    // Guard: skip if an external model with same provider+model already exists
+    const existing = externalModelManager.getModels().find(m => m.provider === model.provider && m.model === model.model && m.name === model.name);
+    if (existing) {
+      console.log('⚠️ Main: External model already exists, skipping add:', model.name);
+      return { success: true, skipped: true, id: existing.id };
+    }
     await externalModelManager.addModel(model);
     console.log('✅ Main: External model added successfully');
     return { success: true };
@@ -633,6 +639,32 @@ ipcMain.handle('external-models:validate-key', async (event, provider, apiKey, e
   }
 });
 
+ipcMain.handle('external-models:validate-model', async (event, id) => {
+  console.log('🧪 Main: Validating external model by id:', id);
+  try {
+    const result = await externalModelManager.validateModel(id);
+    console.log('✅ Main: Model validation result:', result.status);
+    return { success: true, ...result };
+  } catch (error) {
+    console.error('❌ Main: Error validating model:', error);
+    return { success: false, status: 'error', message: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+// Generate completion with an external model
+ipcMain.handle('external-models:generate', async (event, modelId: string, messages: any[]) => {
+  console.log('💬 Main: External model generate request:', modelId, 'messages:', messages?.length || 0);
+  try {
+    // Insert system prompt if provided by first message role detection (renderer already may include it)
+    const output = await externalModelManager.generateChatCompletion(modelId, messages);
+    console.log('✅ Main: External model generation success, length:', output.length);
+    return { success: true, content: output };
+  } catch (error) {
+    console.error('❌ Main: External model generation failed:', error);
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
 // Dialog handlers
 ipcMain.handle('dialog:openImage', async () => {
   console.log('🖼️ Main: Opening image dialog...');
@@ -661,6 +693,11 @@ ipcMain.handle('dialog:openImage', async () => {
 ipcMain.handle('add-external-model', async (event, model) => {
   console.log('➕ Main: Adding external model:', model.name);
   try {
+    const existing = externalModelManager.getModels().find(m => m.provider === model.provider && m.model === model.model && m.name === model.name);
+    if (existing) {
+      console.log('⚠️ Main: External model already exists, skipping add:', model.name);
+      return { success: true, skipped: true, id: existing.id };
+    }
     await externalModelManager.addModel(model);
     console.log('✅ Main: External model added successfully');
     return { success: true };

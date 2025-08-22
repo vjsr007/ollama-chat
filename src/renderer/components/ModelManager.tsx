@@ -12,6 +12,8 @@ interface ExternalModel {
   description?: string;
   maxTokens?: number;
   temperature?: number;
+  lastValidationStatus?: 'valid' | 'invalid' | 'error';
+  lastValidationMessage?: string;
 }
 
 interface ModelManagerProps {
@@ -152,13 +154,28 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
     }
   };
 
+  const validateModel = async (id: string) => {
+    try {
+      const res = await (window as any).externalModels?.validateModel(id);
+      if (res && res.success) {
+        await loadExternalModels();
+      } else {
+        alert('Error validating model: ' + (res?.message || 'unknown'));
+      }
+    } catch (e) {
+      console.error('Error validating model', e);
+      alert('Error validating model');
+    }
+  };
+
   const startEditModel = (model: ExternalModel) => {
     setEditingModel(model);
     setNewModel({
       name: model.name,
       provider: model.provider,
       model: model.model,
-      apiKey: model.apiKey,
+  // If apiKey is the secure sentinel, don't prefill (user leaves blank to keep existing)
+  apiKey: model.apiKey === '__SECURE__' ? '' : model.apiKey,
       endpoint: model.endpoint,
       enabled: model.enabled,
       description: model.description,
@@ -175,17 +192,20 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
     }
 
     try {
-      const modelToUpdate = {
+      const modelToUpdate: any = {
         name: newModel.name!,
         provider: newModel.provider!,
         model: newModel.model!,
-        apiKey: newModel.apiKey,
         endpoint: newModel.endpoint,
         enabled: newModel.enabled ?? true,
         description: newModel.description,
         maxTokens: newModel.maxTokens,
         temperature: newModel.temperature
       };
+      // Only send apiKey if user typed something (blank means keep existing)
+      if (newModel.apiKey && newModel.apiKey.trim() !== '') {
+        modelToUpdate.apiKey = newModel.apiKey.trim();
+      }
 
       const response = await (window as any).externalModels?.update(editingModel.id, modelToUpdate);
       if (response && response.success) {
@@ -267,6 +287,10 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
 
   if (!isOpen) return null;
 
+  const openCopilot = () => {
+    window.open('https://github.com/copilot', '_blank');
+  };
+
   return (
     <div className="model-manager-overlay">
       <div className="model-manager">
@@ -286,6 +310,11 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
               >
                 ➕ Add Model
               </button>
+              <button
+                onClick={openCopilot}
+                className="add-model-btn"
+                title="Open GitHub Copilot Chat"
+              >🐙 Open Copilot</button>
             </div>
 
             {externalModels.length === 0 ? (
@@ -313,12 +342,37 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
                           <span className="model-description">{model.description}</span>
                         )}
                       </div>
-                      {model.apiKey && (
-                        <div className="model-key">🔑 API Key configured</div>
+                      {model.apiKey === '__SECURE__' && (
+                        <div className="model-key">� API Key stored securely</div>
+                      )}
+                      {model.lastValidationStatus && (
+                        <div className={`model-validation status-${model.lastValidationStatus}`} title={model.lastValidationMessage || ''}>
+                          {model.lastValidationStatus === 'valid' && '✅ Valid'}
+                          {model.lastValidationStatus === 'invalid' && '⚠️ Invalid'}
+                          {model.lastValidationStatus === 'error' && '❌ Error'}
+                          {model.lastValidationMessage && (
+                            <span className="validation-msg"> - {model.lastValidationMessage}</span>
+                          )}
+                          {model.provider === 'github-copilot' && model.lastValidationMessage?.includes('404') && (
+                            <div className="validation-hint">
+                              🔍 The GitHub Models API returned 404 for this model id. Verify:
+                              <ul>
+                                <li>Model ID is exact (e.g. claude-3.5-sonnet, gpt-4o, gpt-4o-mini, o3-mini, claude-3-haiku, mistral-large)</li>
+                                <li>Your account has access to GitHub Models preview / Copilot entitlement</li>
+                                <li>Your PAT is active & includes read:user (and models scope if required)</li>
+                              </ul>
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
                     
                     <div className="model-controls">
+                      <button
+                        onClick={() => validateModel(model.id)}
+                        className="validate-btn"
+                        title="Validate model/API key"
+                      >🧪</button>
                       <button
                         onClick={() => toggleModel(model.id)}
                         className={`toggle-btn ${model.enabled ? 'enabled' : 'disabled'}`}
@@ -349,7 +403,10 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
 
           {/* Predefined models */}
           <div className="predefined-section">
-            <h3>⭐ Popular Models</h3>
+              <h3>⭐ Popular Models</h3>
+              <div className="copilot-hint">
+                🐙 GitHub Copilot models use your GitHub token via the GitHub Models API. Token is stored securely (never written to disk).
+              </div>
             <div className="predefined-providers">
               {Object.entries(predefinedModels).map(([provider, models]) => (
                 <div key={provider} className="provider-section">
@@ -430,6 +487,14 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
                     onChange={(e) => setNewModel(prev => ({ ...prev, apiKey: e.target.value }))}
                     placeholder="Your API key"
                   />
+                    {editingModel && (
+                      <button
+                        type="button"
+                        className="inline-btn"
+                        onClick={() => setNewModel(prev => ({ ...prev, apiKey: '' }))}
+                        title="Leave blank to keep stored key; enter new value to replace"
+                      >Clear</button>
+                    )}
                 </div>
               </div>
 

@@ -9,8 +9,9 @@ import type { McpToolCall, McpToolResult } from '../shared/domain/mcp';
 import './styles.css';
 
 const App: React.FC = () => {
-  const [models, setModels] = useState<string[]>([]);
-  const [model, setModel] = useState('');
+  const [models, setModels] = useState<string[]>([]); // local Ollama models
+  const [externalModels, setExternalModels] = useState<any[]>([]); // enabled external models
+  const [model, setModel] = useState(''); // selected model (local name or ext:<id>)
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -31,6 +32,21 @@ const App: React.FC = () => {
   const chatRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
+  const loadExternalModels = async () => {
+    try {
+      const res = await (window as any).externalModels?.getAll();
+      if (res?.success) {
+        const enabled = (res.models || []).filter((m: any) => m.enabled);
+        setExternalModels(enabled);
+        if (!model) {
+          if (enabled[0]) setModel(`ext:${enabled[0].id}`); else if (models[0]) setModel(models[0]);
+        }
+      }
+    } catch (e) {
+      console.error('Error loading external models for dropdown', e);
+    }
+  };
+
   useEffect(() => {
     if (chatRef.current) {
       chatRef.current.scrollTop = chatRef.current.scrollHeight;
@@ -38,7 +54,9 @@ const App: React.FC = () => {
   }, [messages, isLoading]);
 
   useEffect(() => {
-    window.ollama.listModels().then(ms => { setModels(ms); if (ms[0]) setModel(ms[0]); });
+  window.ollama.listModels().then(ms => { setModels(ms); });
+  // Load external models
+  loadExternalModels();
     
     // Load prompt history from localStorage
     const savedHistory = localStorage.getItem('ollama-chat-prompt-history');
@@ -278,7 +296,15 @@ const App: React.FC = () => {
       console.log('📝 UI: Messages being sent:', newMessages);
       console.log('🤖 UI: Model:', model);
       
-      const reply = await window.ollama.sendChat({ model, messages: newMessages });
+      let reply: string = '';
+      if (model.startsWith('ext:')) {
+        const extId = model.slice(4);
+        const r = await (window as any).externalModels.generate(extId, newMessages);
+        if (!r?.success) throw new Error(r?.error || 'External model error');
+        reply = r.content;
+      } else {
+        reply = await window.ollama.sendChat({ model, messages: newMessages });
+      }
       
       console.log('📨 UI: Received reply from main process:', reply);
       console.log('📏 UI: Reply length:', reply?.length || 0);
@@ -439,7 +465,8 @@ const App: React.FC = () => {
       <div className="toolbar">
         <label htmlFor="modelSelect">Model:</label>
         <select id="modelSelect" value={model} onChange={e => setModel(e.target.value)} aria-label="Select model">
-          {models.map(m => <option key={m} value={m}>{m}</option>)}
+          {externalModels.length > 0 && <optgroup label="External">{externalModels.map(em => <option key={em.id} value={`ext:${em.id}`}>{`${em.name || em.model} (${em.provider})`}</option>)}</optgroup>}
+          <optgroup label="Local (Ollama)">{models.map(m => <option key={m} value={m}>{m}</option>)}</optgroup>
         </select>
         
         {/* Tool status indicator */}

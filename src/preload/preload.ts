@@ -35,7 +35,9 @@ export const externalModelsApi = {
   update: (id: string, updates: any) => ipcRenderer.invoke('external-models:update', id, updates),
   remove: (id: string) => ipcRenderer.invoke('external-models:remove', id),
   toggle: (id: string, enabled: boolean) => ipcRenderer.invoke('external-models:toggle', id, enabled),
-  validateKey: (provider: string, apiKey: string, endpoint?: string) => ipcRenderer.invoke('external-models:validate-key', provider, apiKey, endpoint)
+  validateKey: (provider: string, apiKey: string, endpoint?: string) => ipcRenderer.invoke('external-models:validate-key', provider, apiKey, endpoint),
+  validateModel: (id: string) => ipcRenderer.invoke('external-models:validate-model', id),
+  generate: (id: string, messages: any[]) => ipcRenderer.invoke('external-models:generate', id, messages)
 };
 
 contextBridge.exposeInMainWorld('ollama', api);

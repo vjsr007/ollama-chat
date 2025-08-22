@@ -1,18 +1,22 @@
 import fs from 'fs';
 import path from 'path';
 import { app } from 'electron';
+import keytar from 'keytar';
 
 export interface ExternalModel {
   id: string;
   name: string;
   provider: 'openai' | 'anthropic' | 'github-copilot' | 'google' | 'cohere';
   model: string;
-  apiKey?: string;
+  // apiKey is no longer persisted to disk. At runtime we may return a sentinel value "__SECURE__" to indicate a stored key.
+  apiKey?: string; 
   endpoint?: string;
   enabled: boolean;
   description?: string;
   maxTokens?: number;
   temperature?: number;
+  lastValidationStatus?: 'valid' | 'invalid' | 'error';
+  lastValidationMessage?: string;
 }
 
 export interface ExternalModelConfig {
@@ -23,11 +27,14 @@ export interface ExternalModelConfig {
 export class ExternalModelManager {
   private configPath: string;
   private config: ExternalModelConfig;
+  private serviceName: string;
 
   constructor() {
     // Store configuration in userData directory
     const userDataPath = app.getPath('userData');
     this.configPath = path.join(userDataPath, 'external-models.json');
+    // Service name for keytar (stable, unique)
+    this.serviceName = 'ollama-chat-external-model';
     this.config = this.loadConfig();
   }
 
@@ -35,7 +42,24 @@ export class ExternalModelManager {
     try {
       if (fs.existsSync(this.configPath)) {
         const data = fs.readFileSync(this.configPath, 'utf8');
-        return JSON.parse(data);
+        const parsed: ExternalModelConfig = JSON.parse(data);
+        // One-time migration: move any inline apiKey fields into secure storage
+        let migrated = false;
+        for (const m of parsed.models) {
+          if (m.apiKey) {
+            try {
+              keytar.setPassword(this.serviceName, m.id, m.apiKey);
+              delete m.apiKey; // remove plaintext
+              migrated = true;
+            } catch (e) {
+              console.error('Error migrating apiKey to keytar for model', m.name, e);
+            }
+          }
+        }
+        if (migrated) {
+          try { this.saveConfigInternal(parsed); } catch {}
+        }
+        return parsed;
       }
     } catch (error) {
       console.error('Error loading external models config:', error);
@@ -56,9 +80,25 @@ export class ExternalModelManager {
       }
       
       this.config.lastUpdated = new Date().toISOString();
-      fs.writeFileSync(this.configPath, JSON.stringify(this.config, null, 2));
+      // Ensure no apiKey fields leak into persisted file
+      const cloned: ExternalModelConfig = JSON.parse(JSON.stringify(this.config));
+      cloned.models.forEach(m => { if (m.apiKey) delete m.apiKey; });
+      fs.writeFileSync(this.configPath, JSON.stringify(cloned, null, 2));
     } catch (error) {
       console.error('Error saving external models config:', error);
+    }
+  }
+
+  // Internal save for migration (assumes config already sanitized)
+  private saveConfigInternal(cfg: ExternalModelConfig) {
+    try {
+      const userDataPath = path.dirname(this.configPath);
+      if (!fs.existsSync(userDataPath)) {
+        fs.mkdirSync(userDataPath, { recursive: true });
+      }
+      fs.writeFileSync(this.configPath, JSON.stringify(cfg, null, 2));
+    } catch (e) {
+      console.error('Error during internal save:', e);
     }
   }
 
@@ -66,26 +106,95 @@ export class ExternalModelManager {
     return this.config.models;
   }
 
+  // Returns sanitized models with apiKey replaced by sentinel if stored securely
+  public async getModelsSanitized(): Promise<ExternalModel[]> {
+    const out: ExternalModel[] = [];
+    for (const m of this.config.models) {
+      const hasKey = await this.hasStoredKey(m.id);
+      out.push({ ...m, apiKey: hasKey ? '__SECURE__' : undefined });
+    }
+    return out;
+  }
+
+  private async hasStoredKey(id: string): Promise<boolean> {
+    try {
+      const pw = await keytar.getPassword(this.serviceName, id);
+      return !!pw;
+    } catch {
+      return false;
+    }
+  }
+
+  private async getStoredKey(id: string): Promise<string | undefined> {
+    try {
+      return await keytar.getPassword(this.serviceName, id) || undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private async setStoredKey(id: string, key?: string) {
+    try {
+      if (!key) {
+        await keytar.deletePassword(this.serviceName, id);
+      } else {
+        await keytar.setPassword(this.serviceName, id, key);
+      }
+    } catch (e) {
+      console.error('Error setting stored key for model', id, e);
+    }
+  }
+
   public getEnabledModels(): ExternalModel[] {
     return this.config.models.filter(m => m.enabled);
   }
 
   public addModel(model: Omit<ExternalModel, 'id'>): ExternalModel {
+    // Deduplicate by provider+model (and name if provided)
+    const existing = this.config.models.find(m => 
+      m.provider === model.provider && 
+      m.model === model.model && 
+      (model.name ? m.name === model.name : true)
+    );
+    if (existing) {
+      // Merge simple updatable fields (description, temperature, maxTokens, endpoint, apiKey, enabled)
+      existing.description = model.description ?? existing.description;
+      existing.temperature = model.temperature ?? existing.temperature;
+      existing.maxTokens = model.maxTokens ?? existing.maxTokens;
+      existing.endpoint = model.endpoint ?? existing.endpoint;
+      existing.enabled = model.enabled ?? existing.enabled;
+      // Store key securely if provided
+      if (model.apiKey) {
+        this.setStoredKey(existing.id, model.apiKey);
+      }
+      this.saveConfig();
+      return existing;
+    }
     const newModel: ExternalModel = {
       ...model,
       id: Date.now().toString()
     };
-    
+    // Remove any inline key; store securely
+    const providedKey = newModel.apiKey;
+    if (providedKey) delete (newModel as any).apiKey;
     this.config.models.push(newModel);
     this.saveConfig();
+    if (providedKey) this.setStoredKey(newModel.id, providedKey);
     return newModel;
   }
 
   public updateModel(id: string, updates: Partial<ExternalModel>): boolean {
     const index = this.config.models.findIndex(m => m.id === id);
     if (index === -1) return false;
-    
-    this.config.models[index] = { ...this.config.models[index], ...updates };
+    const current = this.config.models[index];
+    const { apiKey, ...rest } = updates as any;
+    this.config.models[index] = { ...current, ...rest };
+    if (apiKey !== undefined) {
+      // Empty string -> delete stored key
+      this.setStoredKey(id, apiKey || undefined);
+    }
+    // Ensure no apiKey persisted
+    delete (this.config.models[index] as any).apiKey;
     this.saveConfig();
     return true;
   }
@@ -101,6 +210,82 @@ export class ExternalModelManager {
 
   public enableModel(id: string, enabled: boolean): boolean {
     return this.updateModel(id, { enabled });
+  }
+
+  // Helper: find by provider+model
+  public findBySignature(provider: string, model: string): ExternalModel | undefined {
+    return this.config.models.find(m => m.provider === provider && m.model === model);
+  }
+
+  public async validateModel(id: string): Promise<{status: string; message: string}> {
+    const model = this.getModel(id);
+    if (!model) return { status: 'error', message: 'Model not found' };
+    const apiKey = await this.getStoredKey(id);
+    if (!apiKey) {
+      model.lastValidationStatus = 'invalid';
+      model.lastValidationMessage = 'Missing API key';
+      this.saveConfig();
+      return { status: 'invalid', message: 'Missing API key' };
+    }
+    try {
+      // Perform lightweight provider-specific validation
+      let ok = false; let msg = 'OK';
+      if (model.provider === 'github-copilot') {
+        // Simple user fetch + attempt tiny response call
+        const userResp = await fetch('https://api.github.com/user', { headers: { 'Authorization': `Bearer ${apiKey}`, 'Accept': 'application/vnd.github+json' }});
+        if (!userResp.ok) {
+          ok = false; msg = `GitHub auth failed: ${userResp.status}`;
+          console.warn('[GitHub Models][validate] user endpoint failed', { status: userResp.status });
+        } else {
+          // Try a 1-token completion (best-effort)
+          try {
+            const resp = await fetch(`https://api.github.com/models/${model.model}/responses`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                'Accept': 'application/vnd.github+json',
+                'Content-Type': 'application/json',
+                'X-GitHub-Api-Version': '2022-11-28'
+              },
+              body: JSON.stringify({ model: model.model, input: [{ role: 'user', content: [{ type: 'text', text: 'ping'}]}], max_tokens: 1 })
+            });
+            ok = resp.ok;
+            if (!ok) {
+              const bodyTxt = await resp.text();
+              const snippet = bodyTxt.slice(0, 300).replace(/\s+/g, ' ').trim();
+              msg = `Response error ${resp.status}${resp.status === 404 ? ' (model not found – verify model name & access)' : ''}${snippet ? ': ' + snippet : ''}`;
+              console.warn('[GitHub Models][validate] response not ok', { status: resp.status, model: model.model, snippet });
+            } else {
+              console.debug('[GitHub Models][validate] minimal call ok', { model: model.model });
+            }
+          } catch (e: any) {
+            ok = false; msg = 'Error calling model: ' + e.message;
+            console.error('[GitHub Models][validate] exception', e);
+          }
+        }
+      } else if (model.provider === 'openai') {
+        ok = await this.validateOpenAIKey(apiKey, model.endpoint);
+        if (!ok) msg = 'OpenAI key invalid';
+      } else if (model.provider === 'anthropic') {
+        ok = await this.validateAnthropicKey(apiKey);
+        if (!ok) msg = 'Anthropic key invalid';
+      } else if (model.provider === 'google') {
+        ok = await this.validateGoogleKey(apiKey);
+        if (!ok) msg = 'Google key invalid';
+      } else if (model.provider === 'cohere') {
+        ok = await this.validateCohereKey(apiKey);
+        if (!ok) msg = 'Cohere key invalid';
+      }
+      model.lastValidationStatus = ok ? 'valid' : 'invalid';
+      model.lastValidationMessage = msg;
+      this.saveConfig();
+      return { status: model.lastValidationStatus, message: msg };
+    } catch (error: any) {
+      model.lastValidationStatus = 'error';
+      model.lastValidationMessage = error?.message || 'Unknown error';
+      this.saveConfig();
+  return { status: 'error', message: model.lastValidationMessage || 'Unknown error' };
+    }
   }
 
   public getModel(id: string): ExternalModel | undefined {
@@ -221,22 +406,20 @@ export class ExternalModelManager {
     if (!model || !model.enabled) {
       throw new Error(`Model ${modelId} not found or disabled`);
     }
-
-    if (!model.apiKey) {
-      throw new Error(`No API key configured for model ${modelId}`);
-    }
+  const apiKey = await this.getStoredKey(modelId);
+  if (!apiKey) throw new Error(`No API key configured for model ${modelId}`);
 
     switch (model.provider) {
       case 'openai':
-        return await this.callOpenAI(model, messages, options);
+    return await this.callOpenAI({ ...model, apiKey }, messages, options);
       case 'anthropic':
-        return await this.callAnthropic(model, messages, options);
+    return await this.callAnthropic({ ...model, apiKey }, messages, options);
       case 'github-copilot':
-        return await this.callGitHubCopilot(model, messages, options);
+    return await this.callGitHubCopilot({ ...model, apiKey }, messages, options);
       case 'google':
-        return await this.callGoogle(model, messages, options);
+    return await this.callGoogle({ ...model, apiKey }, messages, options);
       case 'cohere':
-        return await this.callCohere(model, messages, options);
+    return await this.callCohere({ ...model, apiKey }, messages, options);
       default:
         throw new Error(`Unsupported provider: ${model.provider}`);
     }
@@ -294,28 +477,71 @@ export class ExternalModelManager {
   }
 
   private async callGitHubCopilot(model: ExternalModel, messages: any[], options?: any): Promise<string> {
-    // GitHub Copilot uses their chat API
-    const response = await fetch('https://api.githubcopilot.com/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${model.apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: model.model,
-        messages,
-        temperature: options?.temperature ?? model.temperature ?? 0.7,
-        max_tokens: options?.maxTokens ?? model.maxTokens ?? 4096
-      })
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`GitHub Copilot API error: ${response.status} - ${error}`);
+    // Real call using GitHub Models Responses API (public preview).
+    // Docs reference: POST https://api.github.com/models/{model}/responses
+    // Token: A GitHub Personal Access Token (classic) or fine‑grained token with models scope (preview) / Copilot subscription.
+    if (!model.apiKey) {
+      return 'GitHub Copilot/GitHub Models: API key (GitHub PAT) not configured. Create one in GitHub Settings > Developer settings > Personal access tokens. Minimum scopes: read:user (plus models scope if available / Copilot enabled). Then edit this model and add the token.';
     }
 
-    const data = await response.json();
-    return data.choices[0]?.message?.content || '';
+    const url = `https://api.github.com/models/${model.model}/responses`;
+
+    // Transform messages to GitHub Responses API input shape
+    const input = messages.map(m => ({
+      role: m.role,
+      content: [ { type: 'text', text: m.content } ]
+    }));
+
+    const body = {
+      model: model.model,
+      input,
+      temperature: options?.temperature ?? model.temperature ?? 0.7,
+      max_tokens: options?.maxTokens ?? model.maxTokens ?? 1024 // GitHub may enforce internal caps
+    };
+
+  const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+    'Authorization': `Bearer ${model.apiKey}`,
+    'Accept': 'application/vnd.github+json',
+        'Content-Type': 'application/json',
+        'X-GitHub-Api-Version': '2022-11-28'
+      },
+      body: JSON.stringify(body)
+    });
+
+    if (response.status === 401 || response.status === 403) {
+      return `GitHub Models authorization failed (${response.status}). Ensure your PAT has Copilot/models access and that your account has an active Copilot subscription. Model: ${model.model}`;
+    }
+
+    if (!response.ok) {
+      const errTxt = await response.text();
+      const snippet = errTxt.slice(0, 400).replace(/\s+/g, ' ').trim();
+      console.error('[GitHub Models] call failed', { status: response.status, statusText: response.statusText, model: model.model, snippet });
+      if (response.status === 404) {
+        throw new Error(`GitHub Models 404 Not Found for '${model.model}'. The model name may be incorrect, not enabled for your account, or requires a different identifier. Body: ${snippet}`);
+      }
+      throw new Error(`GitHub Models error ${response.status}: ${snippet}`);
+    }
+
+    const data: any = await response.json();
+    // Attempt to extract text from multiple possible shapes (preview schemas can evolve)
+    let text = '';
+    if (data?.output?.length) {
+      // Newer shape: output is array of message objects
+      const first = data.output[0];
+      if (first?.content?.length) {
+        text = first.content.map((c: any) => c.text).filter(Boolean).join('\n');
+      }
+    }
+    if (!text && Array.isArray(data?.choices)) {
+      text = data.choices[0]?.message?.content || data.choices[0]?.text || '';
+    }
+    if (!text && typeof data === 'object') {
+      // Fallback search
+      text = JSON.stringify(data);
+    }
+    return text || '';
   }
 
   private async callGoogle(model: ExternalModel, messages: any[], options?: any): Promise<string> {

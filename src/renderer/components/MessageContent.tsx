@@ -1,6 +1,6 @@
 import React from 'react';
-import CodeBlock from './CodeBlock';
 import EnhancedJsonRenderer from './EnhancedJsonRenderer';
+import MarkdownRenderer from './MarkdownRenderer';
 import './MessageContent.css';
 
 interface MessageContentProps {
@@ -31,32 +31,8 @@ const MessageContent: React.FC<MessageContentProps> = ({ content }) => {
     return <EnhancedJsonRenderer content={content} />;
   }
 
-  // Original code block processing for non-JSON content
-  const parts = content.split(/(```[\s\S]*?```)/);
-  
-  return (
-    <div className="message-content">
-      {parts.map((part, index) => {
-        if (part.startsWith('```') && part.endsWith('```')) {
-          const lines = part.split('\n');
-          const firstLine = lines[0];
-          const language = firstLine.slice(3).trim() || 'text';
-          const code = lines.slice(1, -1).join('\n');
-          
-          return <CodeBlock key={index} code={code} language={language} />;
-        }
-        
-        return (
-          <div
-            key={index}
-            className="text-content"
-          >
-            {part}
-          </div>
-        );
-      })}
-    </div>
-  );
+  // Use markdown renderer (supports fenced code blocks) for remaining content
+  return <div className="message-content"><MarkdownRenderer content={content} /></div>;
 };
 
 export default MessageContent;

@@ -1,4 +1,4 @@
-import '@types/jest';
+import '@testing-library/jest-dom';
 
 /**
  * Global Jest configuration

@@ -41,6 +41,7 @@
     "axios": "^1.7.2",
     "chokidar": "^3.6.0",
     "cors": "^2.8.5",
+    "dompurify": "^3.1.6",
     "dotenv": "^16.4.5",
     "electron-store": "^9.0.0",
     "express": "^4.19.2",
@@ -59,7 +60,10 @@
     "zod": "^3.22.4"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.8.0",
+    "@testing-library/react": "^16.3.0",
     "@types/cors": "^2.8.17",
+    "@types/dompurify": "^3.0.5",
     "@types/express": "^4.17.21",
     "@types/jest": "^29.5.12",
     "@types/lodash": "^4.17.0",
@@ -76,6 +80,7 @@
     "electron-builder": "^24.13.3",
     "eslint": "^8.57.0",
     "jest": "^29.7.0",
+    "jest-environment-jsdom": "^30.0.5",
     "png-to-ico": "^2.1.5",
     "pngjs": "^7.0.0",
     "prettier": "^3.2.5",

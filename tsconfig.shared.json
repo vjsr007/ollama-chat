@@ -20,7 +20,7 @@
       "@infrastructure/*": ["shared/infrastructure/*"],
       "@renderer/*": ["renderer/*"]
     },
-    "types": ["node"]
+  "types": ["node", "jest", "@testing-library/jest-dom"]
   },
   "include": ["src/shared"],
   "exclude": ["node_modules", "dist"]

@@ -331,9 +331,15 @@ const App: React.FC = () => {
     } catch (error) {
       console.error('Error sending message:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      let userFriendly = errorMessage;
+      if (/google/i.test(errorMessage) && /429/.test(errorMessage)) {
+        // Extract retry seconds if present (e.g., PT37S or 37s formats)
+        const retryMatch = errorMessage.match(/retry (?:after )?(\d+\w?)/i);
+        userFriendly = `⚠️ Google rate limit reached. ${retryMatch ? `Suggested wait: ${retryMatch[1]}.` : ''} Reduce request frequency or upgrade quota.`;
+      }
       setMessages([...newMessages, { 
         role: 'assistant', 
-        content: `❌ Error: ${errorMessage}. Please check that Ollama is running and the model is available.` 
+        content: `❌ Error: ${userFriendly}` 
       }]);
     } finally {
       setIsLoading(false);

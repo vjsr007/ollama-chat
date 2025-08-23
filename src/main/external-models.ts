@@ -608,12 +608,32 @@ export class ExternalModelManager {
     );
 
     if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Google API error: ${response.status} - ${error}`);
+      let bodyText = await response.text();
+      // Try to parse JSON for structured error info
+      try {
+        const parsed = JSON.parse(bodyText);
+        if (parsed?.error) {
+          const code = parsed.error.code;
+            const status = parsed.error.status;
+          const msg = parsed.error.message;
+          // Find retry delay if present
+          let retryDelay: string | undefined;
+          const details = parsed.error.details;
+          if (Array.isArray(details)) {
+            const retryInfo = details.find((d: any) => d['@type']?.includes('RetryInfo'));
+            if (retryInfo?.retryDelay) retryDelay = retryInfo.retryDelay;
+          }
+          if (code === 429) {
+            throw new Error(`Google rate limit (429 ${status})${retryDelay ? ` - retry after ${retryDelay}` : ''}: ${msg}`);
+          }
+          bodyText = msg || bodyText;
+        }
+      } catch { /* ignore parse errors */ }
+      throw new Error(`Google API error: ${response.status} - ${bodyText}`);
     }
 
     const data = await response.json();
-    return data.candidates[0]?.content?.parts[0]?.text || '';
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
   }
 
   private async callCohere(model: ExternalModel, messages: any[], options?: any): Promise<string> {

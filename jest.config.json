@@ -1,6 +1,6 @@
 {
   "preset": "ts-jest",
-  "testEnvironment": "node",
+  "testEnvironment": "jsdom",
   "roots": ["<rootDir>/src"],
   "testMatch": [
     "**/__tests__/**/*.+(ts|tsx|js)",
@@ -8,6 +8,11 @@
   ],
   "transform": {
     "^.+\\.(ts|tsx)$": "ts-jest"
+  },
+  "globals": {
+    "ts-jest": {
+      "tsconfig": "tsconfig.shared.json"
+    }
   },
   "collectCoverageFrom": [
     "src/**/*.{ts,tsx}",
@@ -20,8 +25,9 @@
     "lcov",
     "html"
   ],
-  "moduleNameMapping": {
+  "moduleNameMapper": {
     "^@/(.*)$": "<rootDir>/src/$1"
+  ,"^.+\\.(css|scss)$": "<rootDir>/src/tests/styleMock.js"
   },
   "setupFilesAfterEnv": ["<rootDir>/src/tests/setup.ts"]
 }

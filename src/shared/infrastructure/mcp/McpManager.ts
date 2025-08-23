@@ -11,6 +11,8 @@ export class McpManager extends EventEmitter {
     status: string;
     tools: McpTool[];
     buffer: string;
+  // Accumulates multi-line JSON-RPC messages when a server outputs pretty-printed JSON
+  partialJson?: string;
     pending: Map<string, { resolve: Function; reject: Function; timeout: NodeJS.Timeout }>;
     nextId: number;
   }>();
@@ -311,6 +313,7 @@ export class McpManager extends EventEmitter {
       status: 'stopped',
       tools: [],
       buffer: '',
+  partialJson: undefined as string | undefined,
       pending: new Map(),
       nextId: 0
     };
@@ -437,12 +440,33 @@ export class McpManager extends EventEmitter {
       const trimmed = line.trim();
       if (!trimmed) continue;
       
+      // Some MCP servers (e.g., brave-search) may pretty-print JSON across multiple lines.
+      // We attempt incremental assembly: if a line does not parse, accumulate until it does.
+      let candidate = trimmed;
+      if (serverState.partialJson) {
+        candidate = serverState.partialJson + '\n' + trimmed;
+      }
+      let parsed: any;
       try {
-        const message = JSON.parse(trimmed);
-        console.log(`📨 [${serverState.config.name}] Parsed JSON-RPC message:`, message.method || 'response', message.id ? `(id: ${message.id})` : '');
-        this.handleJsonRpcMessage(id, message);
-      } catch (error) {
-        console.warn(`⚠️ [${serverState.config.name}] Failed to parse JSON:`, trimmed.substring(0, 100));
+        parsed = JSON.parse(candidate);
+      } catch {
+        // Not yet valid JSON, keep accumulating if it looks like JSON (starts with { or [)
+        if (!serverState.partialJson && /^[{\[]/.test(trimmed)) {
+          serverState.partialJson = trimmed; // start accumulation
+        } else if (serverState.partialJson) {
+          serverState.partialJson += '\n' + trimmed;
+        } else {
+          // Not JSON, ignore
+        }
+        continue;
+      }
+      // Successful parse => clear accumulator
+      serverState.partialJson = undefined;
+      try {
+        console.log(`📨 [${serverState.config.name}] Parsed JSON-RPC message:`, parsed.method || 'response', parsed.id ? `(id: ${parsed.id})` : '');
+        this.handleJsonRpcMessage(id, parsed);
+      } catch (err) {
+        console.warn(`⚠️ [${serverState.config.name}] Error handling parsed JSON message:`, (err as Error).message);
       }
     }
   }
@@ -900,6 +924,7 @@ export class McpManager extends EventEmitter {
                 status: 'stopped',
                 tools: [],
                 buffer: '',
+                partialJson: undefined,
                 pending: new Map(),
                 nextId: 1
               });
@@ -937,6 +962,7 @@ export class McpManager extends EventEmitter {
                   status: 'stopped',
                   tools: [],
                   buffer: '',
+                  partialJson: undefined,
                   pending: new Map(),
                   nextId: 1
                 });

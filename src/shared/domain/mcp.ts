@@ -25,6 +25,8 @@ export interface McpServer {
   description?: string;
   category?: string;
   priority?: number; // Added priority field for tool ordering
+  /** Names of environment variables whose values are stored securely (keytar) */
+  secretEnvKeys?: string[];
 }
 
 export interface McpToolCall {

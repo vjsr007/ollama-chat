@@ -2,8 +2,33 @@ import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { McpManager } from '../shared/infrastructure/mcp/McpManager';
+import { mcpSecretStore } from './mcp-secrets';
 import ToolConfigManager from './tool-config';
 import { ExternalModelManager } from './external-models';
+import dotenv from 'dotenv';
+
+// Load environment variables from .env (if present) BEFORE anything else uses process.env
+try {
+  const envPath = path.join(process.cwd(), '.env');
+  if (fs.existsSync(envPath)) {
+    const result = dotenv.config({ path: envPath });
+    if (result.error) {
+      console.warn('⚠️ No se pudo cargar .env:', result.error.message);
+    } else {
+      console.log('✅ Archivo .env cargado');
+    }
+  } else {
+    console.log('ℹ️ No se encontró archivo .env en', envPath);
+  }
+} catch (e) {
+  console.warn('⚠️ Error al intentar cargar .env:', e instanceof Error ? e.message : e);
+}
+// Simple debug (sin exponer valor completo) para BRAVE_API_KEY
+if (process.env.BRAVE_API_KEY) {
+  console.log('🔐 BRAVE_API_KEY detectada (longitud:', process.env.BRAVE_API_KEY.length, ')');
+} else {
+  console.log('🔎 BRAVE_API_KEY no definida en entorno');
+}
 
 console.log('🚀 Electron main process starting...');
 console.log('📂 Process working directory:', process.cwd());
@@ -349,6 +374,26 @@ ipcMain.handle('mcp:add-server', async (event, config) => {
 ipcMain.handle('mcp:start-server', async (event, id) => {
   console.log('▶️ Main: Starting MCP server:', id);
   try {
+    // Inject secrets into env before starting
+    const internalMap: Map<string, any> = (mcpManager as any).servers;
+    const state = internalMap.get(id);
+    if (state && state.config.secretEnvKeys && state.config.secretEnvKeys.length) {
+      state.config.env = state.config.env || {};
+      for (const key of state.config.secretEnvKeys) {
+        const val = await mcpSecretStore.get(id, key);
+        if (val) state.config.env[key] = val;
+      }
+    }
+    // Specific auto-injection for brave-search if BRAVE_API_KEY is defined in process env
+    if (state && id === 'brave-search') {
+      state.config.env = state.config.env || {};
+      if (!state.config.env.BRAVE_API_KEY && process.env.BRAVE_API_KEY) {
+        state.config.env.BRAVE_API_KEY = process.env.BRAVE_API_KEY;
+        console.log('🔐 Inyectado BRAVE_API_KEY al entorno de brave-search (longitud:', process.env.BRAVE_API_KEY.length, ')');
+      } else if (!process.env.BRAVE_API_KEY) {
+        console.warn('⚠️ BRAVE_API_KEY no está definida en process.env al intentar arrancar brave-search');
+      }
+    }
     await mcpManager.startServer(id);
     console.log('✅ Main: MCP server started successfully');
     return { success: true };
@@ -392,6 +437,68 @@ ipcMain.handle('mcp:get-server-tools', async (event, serverId) => {
     console.error('❌ Main: Error fetching server tools:', error);
     throw error;
   }
+});
+
+// Update non-secret server config (e.g., env var names, description). Secrets handled separately.
+ipcMain.handle('mcp:update-server-config', async (event, id, updates) => {
+  try {
+    const internalMap: Map<string, any> = (mcpManager as any).servers;
+    const state = internalMap.get(id);
+    if (!state) return { success: false, error: 'Server not found' };
+    state.config = { ...state.config, ...updates };
+    return { success: true, server: { ...state.config, status: state.status } };
+  } catch (e:any) {
+    return { success: false, error: e.message || String(e) };
+  }
+});
+
+ipcMain.handle('mcp:set-server-secret', async (event, id, key, value) => {
+  try {
+    await mcpSecretStore.set(id, key, value);
+    return { success: true };
+  } catch (e:any) {
+    return { success: false, error: e.message || String(e) };
+  }
+});
+
+ipcMain.handle('mcp:get-server-config', async (event, id) => {
+  try {
+    const servers = mcpManager.getServers();
+    const server = servers.find(s => s.id === id);
+    if (!server) return { success: false, error: 'Server not found' };
+    const secretKeys = server.secretEnvKeys || [];
+    const secretStatus: Record<string,string> = {};
+    for (const k of secretKeys) secretStatus[k] = (await mcpSecretStore.has(id, k)) ? '__SECURE__' : '';
+    return { success: true, server, secrets: secretStatus };
+  } catch (e:any) {
+    return { success: false, error: e.message || String(e) };
+  }
+});
+
+// Check availability of MCP server npm packages referenced by current config
+ipcMain.handle('mcp:check-packages', async () => {
+  const { spawn } = require('child_process');
+  const results: any[] = [];
+  const servers = mcpManager.getServers();
+  for (const s of servers) {
+    if (s.command === 'npx' && s.args && s.args[0] && s.args[0].startsWith('@modelcontextprotocol/server-')) {
+      const pkg = s.args[0];
+      results.push(await new Promise(resolve => {
+        const child = spawn('npm', ['view', pkg, 'version'], { stdio: ['ignore','pipe','pipe'] });
+        let out = ''; let err = '';
+        child.stdout.on('data', (d: Buffer) => { out += d.toString(); });
+        child.stderr.on('data', (d: Buffer) => { err += d.toString(); });
+        child.on('exit', (code: number | null) => {
+          if (code === 0) resolve({ id: s.id, package: pkg, status: 'found', version: out.trim() });
+          else resolve({ id: s.id, package: pkg, status: 'missing', error: err.trim() });
+        });
+        child.on('error', (e: Error) => resolve({ id: s.id, package: pkg, status: 'error', error: e.message }));
+      }));
+    } else if ((s as any).missing || s.name.includes('missing')) {
+      results.push({ id: s.id, package: null, status: 'placeholder' });
+    }
+  }
+  return { success: true, results };
 });
 
 // Reload MCP configuration

@@ -43,15 +43,16 @@
       "category": "database",
       "enabled": false
     },
-    "sqlite": {
+    "sqlite-local": {
       "type": "stdio",
-      "command": "npx",
+      "command": "node",
       "args": [
-        "@modelcontextprotocol/server-sqlite"
+        "integration-servers/sqlite-server.js"
       ],
-  "description": "SQLite database management",
+      "description": "Local SQLite query server (read-only SELECT)",
       "category": "database",
-      "enabled": false
+      "enabled": false,
+      "note": "Replaces missing @modelcontextprotocol/server-sqlite"
     },
     "puppeteer": {
       "type": "stdio",
@@ -73,35 +74,38 @@
       "category": "core",
       "enabled": false
     },
-    "docker": {
+    "docker-local": {
       "type": "stdio",
-      "command": "npx",
+      "command": "node",
       "args": [
-        "@modelcontextprotocol/server-docker"
+        "integration-servers/docker-server.js"
       ],
-  "description": "Docker container management",
+      "description": "Local Docker CLI wrapper (ps, images)",
       "category": "infrastructure",
-      "enabled": false
+      "enabled": false,
+      "note": "Replaces missing @modelcontextprotocol/server-docker"
     },
-    "fetch": {
+    "fetch-local": {
       "type": "stdio",
-      "command": "npx",
+      "command": "node",
       "args": [
-        "@modelcontextprotocol/server-fetch"
+        "integration-servers/fetch-server.js"
       ],
-  "description": "HTTP client for external APIs",
+      "description": "Simple HTTP GET fetch tool",
       "category": "network",
-      "enabled": false
+      "enabled": false,
+      "note": "Replaces missing @modelcontextprotocol/server-fetch"
     },
-    "git": {
+    "git-missing": {
       "type": "stdio",
-      "command": "npx",
+      "command": "echo",
       "args": [
-        "@modelcontextprotocol/server-git"
+        "'@modelcontextprotocol/server-git missing (use github server instead)'"
       ],
-  "description": "Git operations (status, commit, push)",
+      "description": "Placeholder for missing git server (use github instead)",
       "category": "development",
-      "enabled": false
+      "enabled": false,
+      "missing": true
     }
     ,
     "system-access": {
@@ -124,5 +128,66 @@
       "category": "dangerous",
       "enabled": false
     }
+      ,
+      "playwright": {
+        "type": "stdio",
+        "command": "node",
+        "args": [
+          "integration-servers/playwright-server.js"
+        ],
+        "description": "Web automation using Playwright (headless Chromium)",
+        "category": "automation",
+        "enabled": false
+      },
+      "outlook": {
+        "type": "stdio",
+        "command": "node",
+        "args": [
+          "integration-servers/outlook-server.js"
+        ],
+        "description": "Outlook / Microsoft Graph email access (read)",
+        "category": "productivity",
+        "enabled": false
+      },
+      "telegram": {
+        "type": "stdio",
+        "command": "node",
+        "args": [
+          "integration-servers/telegram-server.js"
+        ],
+        "description": "Telegram Bot messaging (send messages)",
+        "category": "messaging",
+        "enabled": false
+      },
+      "whatsapp": {
+        "type": "stdio",
+        "command": "node",
+        "args": [
+          "integration-servers/whatsapp-server.js"
+        ],
+        "description": "WhatsApp Cloud API messaging (send text)",
+        "category": "messaging",
+        "enabled": false
+      },
+      "facebook-instagram": {
+        "type": "stdio",
+        "command": "node",
+        "args": [
+          "integration-servers/facebook-instagram-server.js"
+        ],
+        "description": "Facebook Page insights & Instagram media (Meta Graph)",
+        "category": "social",
+        "enabled": false
+      },
+      "spotify": {
+        "type": "stdio",
+        "command": "node",
+        "args": [
+          "integration-servers/spotify-server.js"
+        ],
+        "description": "Spotify track search (requires token)",
+        "category": "media",
+        "enabled": false
+      }
   }
 }

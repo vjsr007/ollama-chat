@@ -26,6 +26,7 @@ interface McpServer {
   enabled: boolean;
   auto_restart?: boolean;
   status?: 'stopped' | 'starting' | 'ready' | 'error' | 'connecting' | 'closed';
+  secretEnvKeys?: string[];
 }
 
 interface McpToolCall {
@@ -50,6 +51,9 @@ interface ExtendedMcpApi {
   getServerTools: (serverId: string) => Promise<any>;
   reloadConfig: () => Promise<{ success: boolean }>;
   getConfigPath: () => Promise<{ success: boolean; path?: string; error?: string }>;
+  updateServerConfig: (id: string, updates: any) => Promise<any>;
+  setServerSecret: (id: string, key: string, value: string) => Promise<any>;
+  getServerConfig: (id: string) => Promise<any>;
 }
 
 export const McpTools: React.FC<McpToolsProps> = ({ onToolCall }) => {
@@ -76,6 +80,10 @@ export const McpTools: React.FC<McpToolsProps> = ({ onToolCall }) => {
   const [configPath, setConfigPath] = useState<string>('');
   const [loadingConfigPath, setLoadingConfigPath] = useState(false);
   const [reloading, setReloading] = useState(false);
+  const [missingReport, setMissingReport] = useState<string[]>([]);
+  const [packageScan, setPackageScan] = useState<{running: boolean; results: any[]}>({running: false, results: []});
+  const [configuringServer, setConfiguringServer] = useState<McpServer | null>(null);
+  const [serverConfigState, setServerConfigState] = useState<{endpoint?: string; secrets: Record<string,string>; newSecretValues: Record<string,string>}>({endpoint: '', secrets: {}, newSecretValues: {}});
 
   useEffect(() => {
     loadTools();
@@ -134,6 +142,34 @@ export const McpTools: React.FC<McpToolsProps> = ({ onToolCall }) => {
       console.error('Failed to reload MCP config', e);
     } finally {
       setReloading(false);
+    }
+  };
+
+  const detectMissing = async () => {
+    try {
+      await loadServers();
+      const list = await window.mcp.getServers();
+      const problems: string[] = [];
+      list.forEach(s => {
+        if (s.name?.includes('missing') || (s as any).missing) problems.push(`${s.name}: placeholder`);
+        if (s.command === 'npx' && s.args && s.args[0]?.startsWith('@modelcontextprotocol/server-')) {
+          // heuristic: if package not installed globally, invocation may be slow/fail but we can't check directly here
+        }
+      });
+      setMissingReport(problems);
+    } catch (e) {
+      console.error('Detect missing failed', e);
+    }
+  };
+
+  const checkPackages = async () => {
+    setPackageScan({ running: true, results: [] });
+    try {
+      const resp = await (window.mcp as unknown as ExtendedMcpApi & { checkPackages: () => Promise<any> }).checkPackages();
+      if (resp.success) setPackageScan({ running: false, results: resp.results }); else setPackageScan({ running: false, results: [] });
+    } catch (e) {
+      console.error('Package check failed', e);
+      setPackageScan({ running: false, results: [] });
     }
   };
 
@@ -283,6 +319,55 @@ export const McpTools: React.FC<McpToolsProps> = ({ onToolCall }) => {
     }
   };
 
+  const openConfigure = async (server: McpServer) => {
+    try {
+      const resp = await (window.mcp as unknown as ExtendedMcpApi).getServerConfig(server.id);
+      if (resp.success) {
+        let secrets: Record<string,string> = resp.secrets || {};
+        // Heuristic: if no secret keys defined, propose defaults based on server name
+        if (Object.keys(secrets).length === 0) {
+          const n = server.name.toLowerCase();
+          const suggested: string[] = [];
+          if (n.includes('telegram')) suggested.push('TELEGRAM_BOT_TOKEN');
+          if (n.includes('whatsapp')) { suggested.push('WHATSAPP_TOKEN'); suggested.push('WHATSAPP_PHONE_ID'); }
+            if (n.includes('facebook') || n.includes('instagram') || n.includes('meta')) suggested.push('META_TOKEN');
+            if (n.includes('spotify')) suggested.push('SPOTIFY_TOKEN');
+            if (n.includes('outlook') || n.includes('graph')) suggested.push('OUTLOOK_TOKEN');
+            if (n.includes('playwright')) suggested.push('PLAYWRIGHT_WS_ENDPOINT');
+          if (suggested.length) {
+            secrets = Object.fromEntries(suggested.map(k => [k, '']));
+          }
+        }
+        setServerConfigState({
+          endpoint: server.url || '',
+            secrets,
+            newSecretValues: {}
+        });
+        setConfiguringServer(server);
+      }
+    } catch (e) {
+      console.error('Failed to load server config', e);
+    }
+  };
+
+  const saveServerConfig = async () => {
+    if (!configuringServer) return;
+    const id = configuringServer.id;
+    // Update endpoint/url + secret key list if needed
+    const updates: any = {};
+    if (serverConfigState.endpoint !== undefined) updates.url = serverConfigState.endpoint;
+    // For now secrets are predefined heuristically: any existing plus newSecretValues keys
+  const secretKeys = Array.from(new Set([...Object.keys(serverConfigState.secrets), ...Object.keys(serverConfigState.newSecretValues)]));
+    updates.secretEnvKeys = secretKeys;
+    await (window.mcp as unknown as ExtendedMcpApi).updateServerConfig(id, updates);
+    // Store any secret values user entered
+    for (const [k, val] of Object.entries(serverConfigState.newSecretValues)) {
+      if (val) await (window.mcp as unknown as ExtendedMcpApi).setServerSecret(id, k, val);
+    }
+    setConfiguringServer(null);
+    loadServers();
+  };
+
   const selectedToolSchema = (() => {
     const tool = tools.find(t => t.name === selectedTool);
     return tool?.schema && typeof tool.schema === 'object' ? tool.schema : {};
@@ -302,10 +387,22 @@ export const McpTools: React.FC<McpToolsProps> = ({ onToolCall }) => {
           <button onClick={fetchConfigPath} disabled={loadingConfigPath} title="Show folder where MCP config JSON files live">
             📂 {loadingConfigPath ? 'Locating...' : 'Config Path'}
           </button>
+          <button onClick={detectMissing} title="Detect missing / placeholder servers">🩺 Check Missing</button>
+          <button onClick={checkPackages} disabled={packageScan.running} title="npm view each package">{packageScan.running ? '🔍 Scanning...' : '📦 Verify Packages'}</button>
           {configPath && (
             <span className="config-path-label" title={configPath}>{configPath}</span>
           )}
         </div>
+        {missingReport.length > 0 && (
+          <div className="missing-report">
+            <strong>Missing/Placeholder:</strong> {missingReport.join(', ')}
+          </div>
+        )}
+        {packageScan.results.length > 0 && (
+          <div className="missing-report">
+            <strong>Package Status:</strong> {packageScan.results.map(r => `${r.package || r.id}:${r.status}${r.version ? '@'+r.version:''}`).join(' | ')}
+          </div>
+        )}
         
         <div className="tool-selection">
           <div className="tool-selector-container">
@@ -458,6 +555,13 @@ export const McpTools: React.FC<McpToolsProps> = ({ onToolCall }) => {
                   {server.status === 'ready' ? 'Stop' : 'Start'}
                 </button>
                 <button
+                  onClick={() => openConfigure(server)}
+                  className="btn-configure"
+                  title="Configure tokens / endpoint"
+                >
+                  Config
+                </button>
+                <button
                   onClick={() => removeServer(server.id)}
                   className="btn-remove"
                 >
@@ -555,6 +659,41 @@ export const McpTools: React.FC<McpToolsProps> = ({ onToolCall }) => {
               >
                 Add
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {configuringServer && (
+        <div className="modal-overlay">
+          <div className="modal">
+            <div className="modal-header">
+              <h3>Configure: {configuringServer.name}</h3>
+              <button onClick={() => setConfiguringServer(null)} className="modal-close">✕</button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label>Endpoint / URL</label>
+                <input value={serverConfigState.endpoint || ''} onChange={e => setServerConfigState(s => ({...s, endpoint: e.target.value}))} placeholder="https://api.example.com" />
+              </div>
+              {Object.keys(serverConfigState.secrets).length > 0 && (
+                <div className="form-group">
+                  <label>Secrets</label>
+                  {Object.entries(serverConfigState.secrets).map(([k, v]) => (
+                    <div key={k} className="secret-item">
+                      <span className="secret-name">{k}</span>
+                      <input type="password" placeholder={v === '__SECURE__' ? 'Stored' : 'Not set'} onChange={e => setServerConfigState(s => ({...s, newSecretValues: {...s.newSecretValues, [k]: e.target.value}}))} />
+                    </div>
+                  ))}
+                </div>
+              )}
+              {Object.keys(serverConfigState.secrets).length === 0 && (
+                <div className="hint">No secret keys defined for this server.</div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button onClick={() => setConfiguringServer(null)} className="btn-cancel">Cancel</button>
+              <button onClick={saveServerConfig} className="btn-add">Save</button>
             </div>
           </div>
         </div>

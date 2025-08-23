@@ -110,7 +110,8 @@
           "mcp-servers-working.json",
           "mcp-servers-backup.json",
           "mcp-config-simple.json",
-          "unsafe-servers/**"
+          "unsafe-servers/**",
+          "integration-servers/**"
         ]
       }
     ],

@@ -299,7 +299,9 @@ export class McpManager extends EventEmitter {
         console.log(`🔧 Enhanced PATH to include Node.js directories`);
         console.log(`🌍 Environment variables:`, Object.keys(config.env || {}).join(', ') || 'none');
         
-        const proc = spawn(config.command, config.args || [], {
+  // Allow secrets injection: if secretEnvKeys present, resolve from process env placeholder
+  // The actual secret values should already be merged into config.env by the main process before calling startServer.
+  const proc = spawn(config.command, config.args || [], {
           stdio: ['pipe', 'pipe', 'pipe'],
           env: { 
             ...process.env, 

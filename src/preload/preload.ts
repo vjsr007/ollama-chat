@@ -18,7 +18,11 @@ export const mcpApi = {
   removeServer: (id: string) => ipcRenderer.invoke('mcp:remove-server', id),
   getServerTools: (serverId: string) => ipcRenderer.invoke('mcp:get-server-tools', serverId),
   reloadConfig: () => ipcRenderer.invoke('mcp:reload-config'),
-  getConfigPath: () => ipcRenderer.invoke('mcp:get-config-path')
+  getConfigPath: () => ipcRenderer.invoke('mcp:get-config-path'),
+  updateServerConfig: (id: string, updates: any) => ipcRenderer.invoke('mcp:update-server-config', id, updates),
+  setServerSecret: (id: string, key: string, value: string) => ipcRenderer.invoke('mcp:set-server-secret', id, key, value),
+  getServerConfig: (id: string) => ipcRenderer.invoke('mcp:get-server-config', id)
+  ,checkPackages: () => ipcRenderer.invoke('mcp:check-packages')
 };
 
 export const electronApi = {

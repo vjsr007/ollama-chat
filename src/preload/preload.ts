@@ -10,6 +10,10 @@ export const api = {
 
 export const mcpApi = {
   getTools: () => ipcRenderer.invoke('mcp:get-tools'),
+  onToolsUpdated: (cb: (payload: any) => void) => {
+    ipcRenderer.removeAllListeners('mcp:tools-updated');
+    ipcRenderer.on('mcp:tools-updated', (_e, data) => cb(data));
+  },
   callTool: (call: McpToolCall) => ipcRenderer.invoke('mcp:call-tool', call),
   getServers: () => ipcRenderer.invoke('mcp:get-servers'),
   addServer: (config: Omit<McpServer, 'id'>) => ipcRenderer.invoke('mcp:add-server', config),

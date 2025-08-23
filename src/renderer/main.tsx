@@ -55,6 +55,21 @@ const App: React.FC = () => {
     }
   }, [messages, isLoading]);
 
+  // Live tool update listener
+  useEffect(() => {
+    (window as any).mcp?.onToolsUpdated?.((payload: any) => {
+      console.log('🔄 Tools update event received:', payload?.reason, 'count:', payload?.toolsCount);
+      if (Array.isArray(payload?.tools)) {
+        setAvailableTools(payload.tools);
+      } else {
+        // Fallback fetch
+        loadAvailableTools();
+      }
+      // Also refresh status if model selected
+      if (model) loadToolsStatus();
+    });
+  }, [model]);
+
   useEffect(() => {
   window.ollama.listModels().then(ms => { setModels(ms); });
   // Load external models

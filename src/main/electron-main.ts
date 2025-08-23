@@ -95,6 +95,25 @@ let lastExportedListingPath: string | null = null;
 
 console.log('🏗️ Creating global instances completed');
 
+// Bridge MCP manager events to renderer for real-time tool/server updates
+function setupMcpEventBridges() {
+  const forwardTools = (reason: string) => {
+    try {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        const tools = mcpManager.getAllTools();
+        mainWindow.webContents.send('mcp:tools-updated', { reason, toolsCount: tools.length, tools });
+      }
+    } catch (e) {
+      console.warn('⚠️ Failed forwarding tools update', e);
+    }
+  };
+  mcpManager.on('tools-updated', () => forwardTools('tools-updated'));
+  mcpManager.on('server-ready', () => forwardTools('server-ready'));
+  mcpManager.on('server-stopped', () => forwardTools('server-stopped'));
+  mcpManager.on('server-error', () => forwardTools('server-error'));
+}
+setupMcpEventBridges();
+
 function createWindow(): void {
   console.log('🪟 Creating main window...');
   
@@ -884,6 +903,50 @@ app.whenReady().then(async () => {
   console.log('⚡ Electron app ready, initializing components...');
   
   try {
+    // --- GPU & model preload setup -------------------------------------------------
+    // Ensure Ollama uses available NVIDIA GPU(s). User can override via .env OLLAMA_NUM_GPU.
+    if (!process.env.OLLAMA_NUM_GPU) {
+      process.env.OLLAMA_NUM_GPU = '1';
+      console.log('🟢 OLLAMA_NUM_GPU not set; defaulting to 1 to enable GPU usage.');
+    } else {
+      console.log('🟢 OLLAMA_NUM_GPU preset =', process.env.OLLAMA_NUM_GPU);
+    }
+
+    // Optionally allow user to skip automatic pulls
+    const autoPreload = process.env.OLLAMA_AUTO_PRELOAD !== 'false';
+    const preloadModels = ['qwen2.5:latest', 'llama3.1:8b'];
+    if (autoPreload) {
+      console.log('📦 Checking required models for GPU preload:', preloadModels.join(', '));
+      try {
+        const existing = await ollamaClient.listModels();
+        for (const model of preloadModels) {
+          if (!existing.includes(model)) {
+            console.log(`⬇️ Pulling missing model: ${model}`);
+            try {
+              // Use child_process spawn to run 'ollama pull <model>' to ensure model is present.
+              const { spawn } = require('child_process');
+              await new Promise<void>((resolve, reject) => {
+                const proc = spawn('ollama', ['pull', model], { stdio: 'inherit' });
+                proc.on('error', reject);
+                proc.on('exit', (code: number) => {
+                  if (code === 0) resolve(); else reject(new Error(`ollama pull ${model} exited with code ${code}`));
+                });
+              });
+              console.log(`✅ Model pulled: ${model}`);
+            } catch (e) {
+              console.warn(`⚠️ Could not pull model ${model}:`, e instanceof Error ? e.message : e);
+            }
+          } else {
+            console.log(`✅ Model already present: ${model}`);
+          }
+        }
+      } catch (e) {
+        console.warn('⚠️ Could not verify/pull models (ollama may not be running yet):', e instanceof Error ? e.message : e);
+      }
+    } else {
+      console.log('⏩ Skipping model preload (OLLAMA_AUTO_PRELOAD=false)');
+    }
+    // -------------------------------------------------------------------------------
     // Initialize MCP Manager
     const projectRoot = path.join(__dirname, '..', '..', '..');
     console.log('📂 Project root calculated:', projectRoot);

@@ -89,6 +89,15 @@ export const McpTools: React.FC<McpToolsProps> = ({ onToolCall }) => {
     loadTools();
     loadServers();
     loadToolHistory();
+    // Subscribe to real-time tool updates
+    (window as any).mcp?.onToolsUpdated?.((payload: any) => {
+      console.log('[McpTools] 🔄 tools-updated event:', payload?.reason, payload?.toolsCount);
+      if (Array.isArray(payload?.tools)) {
+        setTools(payload.tools);
+      } else {
+        loadTools();
+      }
+    });
   }, []);
 
   const loadToolHistory = () => {

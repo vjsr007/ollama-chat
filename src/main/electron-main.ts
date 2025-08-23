@@ -66,6 +66,23 @@ if (!OllamaClientMod) {
 const { OllamaClient } = OllamaClientMod;
 console.log('🎯 OllamaClient successfully imported');
 
+// Simple in-memory log ring buffer for viewer
+interface LogEntry { ts: number; level: string; msg: string; }
+const LOG_BUFFER_MAX = 2000;
+const logBuffer: LogEntry[] = [];
+const pushLog = (level: string, ...parts: any[]) => {
+  try {
+    const msg = parts.map(p => typeof p === 'string' ? p : (() => { try { return JSON.stringify(p); } catch { return String(p); } })()).join(' ');
+    logBuffer.push({ ts: Date.now(), level, msg });
+    if (logBuffer.length > LOG_BUFFER_MAX) logBuffer.splice(0, logBuffer.length - LOG_BUFFER_MAX);
+  } catch { /* ignore */ }
+};
+// Patch console methods to also feed buffer (non-destructive)
+(['log','info','warn','error'] as const).forEach(l => {
+  const orig = (console as any)[l];
+  (console as any)[l] = (...args: any[]) => { pushLog(l, ...args); orig.apply(console, args); };
+});
+
 // Global instances
 let mainWindow: BrowserWindow | null = null;
 const ollamaClient = new OllamaClient();
@@ -532,6 +549,15 @@ ipcMain.handle('mcp:get-config-path', async () => {
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : String(error) };
   }
+});
+
+// Logs viewer IPC
+ipcMain.handle('logs:get-recent', async (event, limit = 500) => {
+  const slice = logBuffer.slice(-Math.min(limit, logBuffer.length));
+  return { success: true, logs: slice };
+});
+ipcMain.handle('logs:clear', async () => {
+  logBuffer.length = 0; return { success: true };
 });
 
 // Tool configuration handlers

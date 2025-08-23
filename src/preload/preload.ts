@@ -44,10 +44,16 @@ export const externalModelsApi = {
   generate: (id: string, messages: any[]) => ipcRenderer.invoke('external-models:generate', id, messages)
 };
 
+export const logsApi = {
+  getRecent: (limit = 500) => ipcRenderer.invoke('logs:get-recent', limit),
+  clear: () => ipcRenderer.invoke('logs:clear')
+};
+
 contextBridge.exposeInMainWorld('ollama', api);
 contextBridge.exposeInMainWorld('mcp', mcpApi);
 contextBridge.exposeInMainWorld('electronAPI', electronApi);
 contextBridge.exposeInMainWorld('externalModels', externalModelsApi);
+contextBridge.exposeInMainWorld('logs', logsApi);
 
 declare global {
   interface Window {
@@ -55,5 +61,6 @@ declare global {
     mcp: typeof mcpApi;
     electronAPI: typeof electronApi;
     externalModels: typeof externalModelsApi;
+    logs: typeof logsApi;
   }
 }

@@ -127,7 +127,16 @@ export class ExternalModelManager {
 
   private async getStoredKey(id: string): Promise<string | undefined> {
     try {
-      return await keytar.getPassword(this.serviceName, id) || undefined;
+      const direct = await keytar.getPassword(this.serviceName, id) || undefined;
+      if (direct) return direct;
+      // Fallback to environment variable per provider
+      const model = this.getModel(id);
+      if (model) {
+        const envVar = this.resolveEnvVarForProvider(model.provider);
+        if (envVar && process.env[envVar]) return process.env[envVar];
+        if (model.provider === 'custom' && process.env.OPENAI_API_KEY) return process.env.OPENAI_API_KEY;
+      }
+      return undefined;
     } catch {
       return undefined;
     }
@@ -222,10 +231,11 @@ export class ExternalModelManager {
     if (!model) return { status: 'error', message: 'Model not found' };
     const apiKey = await this.getStoredKey(id);
     if (!apiKey) {
+      const envVar = this.resolveEnvVarForProvider(model.provider);
       model.lastValidationStatus = 'invalid';
-      model.lastValidationMessage = 'Missing API key';
+      model.lastValidationMessage = `Missing API key (secure store or env var ${envVar || 'N/A'})`;
       this.saveConfig();
-      return { status: 'invalid', message: 'Missing API key' };
+      return { status: 'invalid', message: model.lastValidationMessage };
     }
     try {
       // Perform lightweight provider-specific validation
@@ -423,32 +433,31 @@ export class ExternalModelManager {
 
   // Generate chat completion for external models
   public async generateChatCompletion(
-    modelId: string, 
-    messages: any[], 
+    modelId: string,
+    messages: any[],
     options?: { temperature?: number; maxTokens?: number }
   ): Promise<string> {
     const model = this.getModel(modelId);
     if (!model || !model.enabled) {
       throw new Error(`Model ${modelId} not found or disabled`);
     }
-  const apiKey = await this.getStoredKey(modelId);
-  if (!apiKey) throw new Error(`No API key configured for model ${modelId}`);
+    const apiKey = await this.getStoredKey(modelId);
+    if (!apiKey) throw new Error(`No API key configured for model ${modelId} (fallback env var ${this.resolveEnvVarForProvider(model.provider) || 'N/A'})`);
 
     switch (model.provider) {
       case 'openai':
-    return await this.callOpenAI({ ...model, apiKey }, messages, options);
+        return await this.callOpenAI({ ...model, apiKey }, messages, options);
       case 'anthropic':
-    return await this.callAnthropic({ ...model, apiKey }, messages, options);
+        return await this.callAnthropic({ ...model, apiKey }, messages, options);
       case 'github-copilot':
-    return await this.callGitHubCopilot({ ...model, apiKey }, messages, options);
+        return await this.callGitHubCopilot({ ...model, apiKey }, messages, options);
       case 'google':
-    return await this.callGoogle({ ...model, apiKey }, messages, options);
+        return await this.callGoogle({ ...model, apiKey }, messages, options);
       case 'cohere':
-    return await this.callCohere({ ...model, apiKey }, messages, options);
+        return await this.callCohere({ ...model, apiKey }, messages, options);
       case 'mistral':
         return await this.callMistral({ ...model, apiKey }, messages, options);
       case 'custom':
-        // Treat as OpenAI compatible using provided endpoint
         return await this.callOpenAI({ ...model, apiKey }, messages, options);
       default:
         throw new Error(`Unsupported provider: ${model.provider}`);
@@ -664,5 +673,18 @@ export class ExternalModelManager {
     }
     const data = await response.json();
     return data.choices?.[0]?.message?.content || '';
+  }
+
+  private resolveEnvVarForProvider(provider: ExternalModel['provider']): string | undefined {
+    switch (provider) {
+      case 'openai': return 'OPENAI_API_KEY';
+      case 'anthropic': return 'ANTHROPIC_API_KEY';
+      case 'github-copilot': return 'GITHUB_TOKEN';
+      case 'google': return 'GOOGLE_API_KEY';
+      case 'cohere': return 'COHERE_API_KEY';
+      case 'mistral': return 'MISTRAL_API_KEY';
+      case 'custom': return 'CUSTOM_API_KEY';
+      default: return undefined;
+    }
   }
 }

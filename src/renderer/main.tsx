@@ -5,6 +5,7 @@ import { McpTools } from './components/McpTools';
 import MessageContent from './components/MessageContent';
 import ToolManager from './components/ToolManager';
 import ModelManager from './components/ModelManager';
+import LogViewer from './components/LogViewer';
 import type { McpToolCall, McpToolResult } from '../shared/domain/mcp';
 import './styles.css';
 
@@ -21,6 +22,7 @@ const App: React.FC = () => {
   const [isToolManagerOpen, setIsToolManagerOpen] = useState(false);
   const [isModelManagerOpen, setIsModelManagerOpen] = useState(false);
   const [toolsStatus, setToolsStatus] = useState<{ enabled: number; total: number; limit: number } | null>(null);
+  const [isLogViewerOpen, setIsLogViewerOpen] = useState(false);
   
   // States for history and autocompletion
   const [promptHistory, setPromptHistory] = useState<string[]>([]);
@@ -406,9 +408,10 @@ const App: React.FC = () => {
       setIsLoading(true);
       const result: McpToolResult = await window.mcp.callTool(call);
       
+      const serialized = JSON.stringify(result.result || result.error, null, 2);
       const toolMessage: ChatMessage = {
         role: 'system',
-        content: `Tool executed: ${call.tool}\nResult: ${JSON.stringify(result.result || result.error, null, 2)}`
+        content: `Tool executed: ${call.tool}\nResult:\n\n\`\`\`json\n${serialized}\n\`\`\``
       };
       
       setMessages(prev => [...prev, toolMessage]);
@@ -462,6 +465,13 @@ const App: React.FC = () => {
             title="Refresh tools and status"
           >
             🔄 Refresh
+          </button>
+          <button
+            className="tab-btn"
+            onClick={() => setIsLogViewerOpen(true)}
+            title="Open backend log viewer"
+          >
+            📜 Logs
           </button>
         </div>
         <div className="actions">
@@ -632,6 +642,7 @@ const App: React.FC = () => {
           loadAvailableTools(); // Reload tools when model manager closes
         }}
       />
+  <LogViewer isOpen={isLogViewerOpen} onClose={() => setIsLogViewerOpen(false)} />
     </div>
   );
 };

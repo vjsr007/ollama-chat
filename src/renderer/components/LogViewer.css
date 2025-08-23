@@ -1,0 +1,17 @@
+.log-viewer-overlay { position: fixed; inset:0; background: rgba(0,0,0,0.55); display:flex; align-items: flex-start; justify-content: center; padding:40px 20px; z-index:1000; }
+.log-viewer { background:#1e1e1e; color:#e0e0e0; width:900px; max-height:80vh; display:flex; flex-direction:column; border:1px solid #333; border-radius:8px; box-shadow:0 4px 20px rgba(0,0,0,.4); font-family: Consolas, 'Courier New', monospace; }
+.lv-header { display:flex; justify-content:space-between; align-items:center; padding:8px 12px; background:#262626; border-bottom:1px solid #333; }
+.lv-controls { display:flex; gap:8px; align-items:center; }
+.lv-controls select, .lv-controls input { background:#111; color:#eee; border:1px solid #444; padding:2px 6px; }
+.lv-body { overflow:auto; padding:4px 0; font-size:12px; line-height:1.35; }
+.lv-row { display:flex; gap:8px; padding:2px 8px 2px 6px; border-left:4px solid #444; }
+.lv-row.level-error { border-left-color:#ff4d4f; }
+.lv-row.level-warn { border-left-color:#faad14; }
+.lv-row.level-info { border-left-color:#1677ff; }
+.lv-row.level-log { border-left-color:#666; }
+.lv-row.level-debug { border-left-color:#52c41a; }
+.lv-row.level-trace { border-left-color:#aaa; }
+.lv-ts { color:#888; min-width:72px; }
+.lv-level { font-weight:bold; min-width:48px; }
+.lv-msg { white-space:pre-wrap; word-break:break-word; flex:1; }
+.lv-empty { padding:20px; text-align:center; color:#777; }

@@ -239,7 +239,22 @@ const EnhancedJsonRenderer: React.FC<EnhancedJsonRendererProps> = ({ content }) 
     setExpandedBlocks(newExpanded);
   };
 
-  const blocks = detectJsonBlocks(content);
+  // Fast path: whole content is JSON
+  let topLevelParsed: any = undefined;
+  if (content) {
+    try {
+      topLevelParsed = JSON.parse(content);
+    } catch { /* ignore */ }
+  }
+
+  const blocks = topLevelParsed !== undefined ? [{
+    type: 'json' as const,
+    content,
+    startIndex: 0,
+    endIndex: content.length,
+    parsed: topLevelParsed,
+    language: 'json'
+  }] : detectJsonBlocks(content);
 
   return (
     <div className="enhanced-json-renderer">
@@ -265,6 +280,13 @@ const EnhancedJsonRenderer: React.FC<EnhancedJsonRendererProps> = ({ content }) 
                 >
                   {isExpanded ? '📄' : '📋'} JSON {isExpanded ? 'Tree View' : 'Code View'}
                 </button>
+                <button
+                  className="json-copy-btn"
+                  onClick={() => {
+                    try { navigator.clipboard.writeText(JSON.stringify(block.parsed, null, 2)); } catch {}
+                  }}
+                  title="Copy JSON"
+                >📎 Copy</button>
                 <span className="json-size-info">
                   {typeof block.parsed === 'object' && block.parsed !== null 
                     ? `${Object.keys(block.parsed).length} properties`

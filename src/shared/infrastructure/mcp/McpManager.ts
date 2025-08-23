@@ -56,6 +56,60 @@ export class McpManager extends EventEmitter {
   constructor(projectRoot?: string) {
     super();
     this.projectRoot = projectRoot || process.cwd();
+    // Config from environment
+    this.logLevel = (process.env.MCP_LOG_LEVEL || 'info').toLowerCase() as any;
+  // Unified default timeout now aligned with .env.example (30s). Override via MCP_TIMEOUT env.
+  const parsed = parseInt(process.env.MCP_TIMEOUT || '30000', 10);
+  this.requestTimeoutMs = isNaN(parsed) ? 30000 : parsed;
+    const conc = parseInt(process.env.MCP_MAX_CONCURRENT_TOOLS || '0', 10);
+    this.maxConcurrentTools = isNaN(conc) ? 0 : conc; // 0 = unlimited
+  }
+
+  private logLevel: 'trace' | 'debug' | 'info' | 'warn' | 'error';
+  private requestTimeoutMs = 30000;
+  private maxConcurrentTools = 0;
+  private activeToolExecutions = 0;
+  private toolQueue: Array<() => void> = [];
+
+  private shouldLog(level: 'trace'|'debug'|'info'|'warn'|'error'): boolean {
+    const order = ['trace','debug','info','warn','error'];
+    return order.indexOf(level) >= order.indexOf(this.logLevel);
+  }
+  private log(level: 'trace'|'debug'|'info'|'warn'|'error', ...args: any[]) {
+    if (!this.shouldLog(level)) return;
+    const fn = level === 'error' ? console.error : level === 'warn' ? console.warn : console.log;
+    fn(`[MCP:${level}]`, ...args);
+  }
+
+  private runWithConcurrency<T>(fn: () => Promise<T>): Promise<T> {
+    if (!this.maxConcurrentTools || this.maxConcurrentTools <= 0) return fn();
+    return new Promise<T>((resolve, reject) => {
+      const start = () => {
+        this.activeToolExecutions++;
+        fn().then(res => {
+          this.activeToolExecutions--;
+          this.nextFromQueue();
+          resolve(res);
+        }).catch(err => {
+          this.activeToolExecutions--;
+          this.nextFromQueue();
+          reject(err);
+        });
+      };
+      if (this.activeToolExecutions < this.maxConcurrentTools) {
+        start();
+      } else {
+        this.toolQueue.push(start);
+        this.log('trace', `Queued tool call. active=${this.activeToolExecutions} queue=${this.toolQueue.length}`);
+      }
+    });
+  }
+
+  private nextFromQueue() {
+    if (this.toolQueue.length === 0) return;
+    if (this.activeToolExecutions >= this.maxConcurrentTools) return;
+    const fn = this.toolQueue.shift();
+    if (fn) fn();
   }
 
   // Clear all registered external MCP servers (builtin tools remain)
@@ -498,14 +552,13 @@ export class McpManager extends EventEmitter {
     }
   }
 
-  private async sendJsonRpcRequest(id: string, message: any, timeoutMs = 300000): Promise<any> {
+  private async sendJsonRpcRequest(id: string, message: any, timeoutMs = this.requestTimeoutMs): Promise<any> {
     const serverState = this.servers.get(id);
     if (!serverState?.process?.stdin) {
       throw new Error(`Server ${id} not available for JSON-RPC communication`);
     }
     
-    console.log(`📤 [${serverState.config.name}] Sending JSON-RPC request:`, message.method, `(id: ${message.id})`);
-    console.log(`⏱️ [${serverState.config.name}] Request timeout set to ${timeoutMs}ms`);
+  this.log('debug', `[${serverState.config.name}] -> ${message.method} (id ${message.id}) timeout=${timeoutMs}`);
     
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
@@ -517,13 +570,13 @@ export class McpManager extends EventEmitter {
       }, timeoutMs);
       
       serverState.pending.set(message.id, { resolve, reject, timeout });
-      console.log(`📊 [${serverState.config.name}] Pending requests: ${serverState.pending.size}`);
+  this.log('trace', `[${serverState.config.name}] pending=${serverState.pending.size}`);
       
       try {
         const messageStr = JSON.stringify(message);
-        console.log(`📡 [${serverState.config.name}] Writing message (${messageStr.length} chars)`);
+  this.log('trace', `[${serverState.config.name}] write ${messageStr.length} chars`);
         serverState.process!.stdin!.write(messageStr + '\n');
-        console.log(`✅ [${serverState.config.name}] Message sent successfully`);
+  this.log('trace', `[${serverState.config.name}] message sent`);
       } catch (error) {
         clearTimeout(timeout);
         serverState.pending.delete(message.id);
@@ -537,10 +590,12 @@ export class McpManager extends EventEmitter {
     const { tool, args, serverId } = call;
     
     console.log(`🔧 Tool call requested: ${tool} with args:`, Object.keys(args).join(', '));
+  this.log('info', `Tool call: ${tool}`);
     
     // Check if it's a builtin tool
     if (this.builtinTools.some(t => t.name === tool)) {
       console.log(`🏠 Using builtin tool: ${tool}`);
+  this.log('debug', `Builtin tool ${tool}`);
       const result = await this.callBuiltinTool(tool, args);
       console.log(`✅ Builtin tool ${tool} completed in ${result.metadata?.executionTime}ms`);
       return {
@@ -558,6 +613,7 @@ export class McpManager extends EventEmitter {
     let targetServerId = serverId;
     if (!targetServerId) {
       console.log(`🔍 Finding server for tool: ${tool}`);
+  this.log('debug', `Finding server for tool ${tool}`);
       // Try to find which server provides this tool
       const foundServerId = this.findServerForTool(tool);
       if (!foundServerId) {
@@ -566,6 +622,7 @@ export class McpManager extends EventEmitter {
       }
       targetServerId = foundServerId;
       console.log(`📍 Found tool ${tool} in server: ${targetServerId}`);
+  this.log('trace', `Found tool ${tool} server=${targetServerId}`);
     }
 
     const serverState = this.servers.get(targetServerId);
@@ -574,26 +631,28 @@ export class McpManager extends EventEmitter {
       throw new Error(`Server ${targetServerId} not found`);
     }
     
-    console.log(`🔄 [${serverState.config.name}] Server status: ${serverState.status}`);
+  console.log(`🔄 [${serverState.config.name}] Server status: ${serverState.status}`);
+  this.log('trace', `[${serverState.config.name}] status=${serverState.status}`);
     if (serverState.status !== 'ready') {
       console.error(`❌ [${serverState.config.name}] Server not ready (status: ${serverState.status})`);
       throw new Error(`Server ${targetServerId} not ready (status: ${serverState.status})`);
     }
     
     const startTime = Date.now();
-    console.log(`⚡ [${serverState.config.name}] Executing tool: ${tool}`);
+  console.log(`⚡ [${serverState.config.name}] Executing tool: ${tool}`);
+  this.log('debug', `[${serverState.config.name}] exec tool ${tool}`);
     
     try {
-      const result = await this.sendJsonRpcRequest(targetServerId, {
+      const execFn = async () => this.sendJsonRpcRequest(targetServerId, {
         jsonrpc: '2.0',
         id: `tool-${Date.now()}-${serverState.nextId++}`,
         method: 'tools/call',
         params: { name: tool, arguments: args }
       });
-      
+      const result = await this.runWithConcurrency(execFn);
       const executionTime = Date.now() - startTime;
       console.log(`✅ [${serverState.config.name}] Tool ${tool} completed successfully in ${executionTime}ms`);
-      
+      this.log('info', `[${serverState.config.name}] tool ${tool} ok ${executionTime}ms`);
       return {
         result: result.content || result,
         metadata: {
@@ -605,10 +664,11 @@ export class McpManager extends EventEmitter {
     } catch (error) {
       const executionTime = Date.now() - startTime;
       console.error(`❌ [${serverState.config.name}] Tool ${tool} failed after ${executionTime}ms:`, error instanceof Error ? error.message : error);
+      this.log('error', `[${serverState.config.name}] tool ${tool} failed`, error);
       return {
         error: error instanceof Error ? error.message : 'Unknown error',
         metadata: {
-          serverId,
+          serverId: targetServerId,
           cached: false,
           executionTime
         }

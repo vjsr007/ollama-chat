@@ -10,20 +10,20 @@ interface MessageContentProps {
 const MessageContent: React.FC<MessageContentProps> = ({ content }) => {
   // Check if content contains JSON patterns for enhanced rendering
   const hasJsonContent = (text: string): boolean => {
-    const jsonPatterns = [
-      /```json/i,
-      /Tool executed:/i,
-      /Result:\s*[\{\[]/i,
-      /SYSTEM\s*\n.*Tool executed:/i,
-      /Result:\s*\[/i,
-      /^\s*[\{\[]/,
-      /[\{\[].{20,}/,
-      /"type":\s*"(text|image)"/i,
-      /"data":\s*"/i,
-      /"mimeType":\s*"/i
+    // Fast reject: single fenced code block with a non-JSON language
+    if (/^```(?!json|javascript|js)[a-z0-9_-]+[\r\n][\s\S]*```\s*$/i.test(text.trim())) {
+      return false;
+    }
+    // Heuristics focused on actual JSON/tool output; avoid generic { ... } inside code samples
+    const indicativePatterns = [
+      /```json/i,               // explicit json code fence
+      /Tool executed:/i,        // tool output marker
+      /Result:\s*[\{\[]/i,    // Result: followed by object/array
+      /^\s*[\{\[][\s\S]*[\}\]]\s*$/m, // whole message is a JSON structure
+      /"type"\s*:\s*"(text|image)"/i,
+      /"mimeType"\s*":/i
     ];
-    
-    return jsonPatterns.some(pattern => pattern.test(text));
+    return indicativePatterns.some(r => r.test(text));
   };
 
   // If content likely contains JSON, use enhanced renderer

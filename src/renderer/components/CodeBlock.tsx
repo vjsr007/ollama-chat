@@ -26,9 +26,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
     const escapedCode = code
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
+      .replace(/>/g, '&gt;'); // leave quotes intact for readability
 
     // Aplicar resaltado básico para algunos lenguajes comunes
     let highlightedCode = escapedCode;
@@ -42,7 +40,6 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
           .replace(/\b(function|const|let|var|if|else|for|while|return|import|export|class|interface|type)\b/g, '<span class="keyword">$1</span>')
           .replace(/\b(true|false|null|undefined)\b/g, '<span class="boolean">$1</span>')
           .replace(/\b(\d+)\b/g, '<span class="number">$1</span>')
-          .replace(/(["'`])((?:\\.|(?!\1)[^\\])*?)\1/g, '<span class="string">$1$2$1</span>')
           .replace(/(\/\/.*$)/gm, '<span class="comment">$1</span>')
           .replace(/(\/\*[\s\S]*?\*\/)/g, '<span class="comment">$1</span>');
         break;
@@ -53,7 +50,6 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
           .replace(/\b(def|class|if|elif|else|for|while|return|import|from|as|try|except|finally|with|pass|break|continue)\b/g, '<span class="keyword">$1</span>')
           .replace(/\b(True|False|None)\b/g, '<span class="boolean">$1</span>')
           .replace(/\b(\d+)\b/g, '<span class="number">$1</span>')
-          .replace(/(["'`])((?:\\.|(?!\1)[^\\])*?)\1/g, '<span class="string">$1$2$1</span>')
           .replace(/(#.*$)/gm, '<span class="comment">$1</span>');
         break;
       

@@ -450,6 +450,10 @@ export class ExternalModelManager {
   //   message.attachments: { type:'image', path?:string, data?:string, mimeType?:string }[]
   // We keep original messages intact for other logic; provider-specific callers transform copies.
   const processedMessages = this.enrichMessagesWithImages(messages);
+  try {
+    const imageDebug = processedMessages.map((m:any,i:number)=>({i, role:m.role, imgsProp: m.images?.length||0, imgPath: !!m.imagePath, parts:m._imageParts?.length||0}));
+    console.log('[ExternalModels][images] Enriched messages summary', imageDebug);
+  } catch {}
 
     switch (model.provider) {
       case 'openai':
@@ -489,6 +493,10 @@ export class ExternalModelManager {
         };
         if (Array.isArray(clone.images)) clone.images.forEach(collect);
         if (Array.isArray(clone.attachments)) clone.attachments.forEach(collect);
+        // Fallback legacy single imagePath
+        if (clone.imagePath && !clone.images) {
+          imageSources.push({ source: clone.imagePath });
+        }
         const processed: any[] = [];
         for (const img of imageSources) {
           let raw = img.source;
@@ -519,6 +527,9 @@ export class ExternalModelManager {
           if (base64) processed.push({ mime, base64 });
         }
         clone._imageParts = processed; // internal use only
+        if (processed.length) {
+          console.log('[ExternalModels][images] Prepared', processed.length, 'image(s) for message role=', clone.role);
+        }
         return clone;
       } catch (e) {
         console.warn('[ExternalModels][images] Failed processing images for message', e);
@@ -528,6 +539,7 @@ export class ExternalModelManager {
   }
 
   private async callOpenAI(model: ExternalModel, messages: any[], options?: any): Promise<string> {
+  console.log('[ExternalModels][images][OpenAI] message image parts:', messages.map((m:any,i:number)=>({i, role:m.role, parts: m._imageParts?.length||0})));
     const baseURL = model.endpoint || 'https://api.openai.com/v1';
     const openAIMessages = messages.map(m => {
       const parts: any[] = [];
@@ -565,6 +577,7 @@ export class ExternalModelManager {
   }
 
   private async callAnthropic(model: ExternalModel, messages: any[], options?: any): Promise<any> {
+  console.log('[ExternalModels][images][Anthropic] message image parts:', messages.map((m:any,i:number)=>({i, role:m.role, parts: m._imageParts?.length||0})));
     // Transform messages to Anthropic schema: content array can include text & images
     const anthMessages = messages.map(m => {
       const parts: any[] = [];
@@ -698,6 +711,7 @@ export class ExternalModelManager {
   }
 
   private async callGoogle(model: ExternalModel, messages: any[], options?: any): Promise<string> {
+  console.log('[ExternalModels][images][Google] message image parts:', messages.map((m:any,i:number)=>({i, role:m.role, parts: m._imageParts?.length||0})));
     // Convert messages to Google's (Gemini) format with optional inline images
     const contents = messages.map(msg => {
       const parts: any[] = [];

@@ -1105,6 +1105,17 @@ ipcMain.handle('external-models:validate-model', async (event, id) => {
 ipcMain.handle('external-models:generate', async (event, modelId: string, messages: any[]) => {
   console.log('💬 Main: External model generate request:', modelId, 'messages:', messages?.length || 0);
   try {
+    if (Array.isArray(messages)) {
+      const withImages = messages.filter(m => m && (m.images?.length || m.imagePath));
+      console.log(`🖼️ Main: Messages containing images: ${withImages.length}`);
+      withImages.forEach((m, idx) => {
+        console.log(`   ↳ [${idx}] role=${m.role} images=${m.images?.length||0} imagePath=${m.imagePath||'none'}`);
+      });
+    }
+  } catch (e) {
+    console.warn('⚠️ Main: Failed logging image metadata', e);
+  }
+  try {
     // ---------------------------------------------------------------------
     // Timeout + logging utilities (5 minute cap per provider call)
     // ---------------------------------------------------------------------
@@ -1427,6 +1438,22 @@ ipcMain.handle('dialog:openImage', async () => {
   } catch (error) {
     console.error('❌ Main: Error opening image dialog:', error);
     throw error;
+  }
+});
+
+// Save a temporary image coming from renderer (blob conversion)
+ipcMain.handle('image:save-temp', async (_e, bytes: number[]) => {
+  try {
+    const buf = Buffer.from(bytes);
+    const tmpDir = path.join(app.getPath('temp'), 'ollama-chat');
+    if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+    const filePath = path.join(tmpDir, `img-${Date.now()}.png`);
+    fs.writeFileSync(filePath, buf);
+    console.log('🖼️ Main: Temp image saved', filePath, 'size', buf.length);
+    return filePath;
+  } catch (e:any) {
+    console.error('❌ Main: Failed to save temp image', e.message || e);
+    return null;
   }
 });
 

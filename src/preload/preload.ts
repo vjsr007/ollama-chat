@@ -5,7 +5,8 @@ import type { McpToolCall, McpServer } from '../shared/domain/mcp';
 export const api = {
   listModels: () => ipcRenderer.invoke('models:list') as Promise<string[]>,
   sendChat: (req: ChatRequest) => ipcRenderer.invoke('chat', req) as Promise<string>,
-  openImage: () => ipcRenderer.invoke('dialog:openImage') as Promise<string | null>
+  openImage: () => ipcRenderer.invoke('dialog:openImage') as Promise<string | null>,
+  saveTempImage: (bytes: number[]) => ipcRenderer.invoke('image:save-temp', bytes) as Promise<string | null>
 };
 
 export const mcpApi = {

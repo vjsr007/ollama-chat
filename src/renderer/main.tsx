@@ -309,7 +309,32 @@ const App: React.FC = () => {
     const baseMessages = messages.length === 0 && systemPrompt.trim()
       ? [{ role: 'system', content: systemPrompt } as ChatMessage, ...messages]
       : messages;
-    const newMsg: ChatMessage = { role: 'user', content: input, imagePath };
+    let images: string[] | undefined;
+    if (imagePath) {
+      // If it's a blob URL, fetch and persist to a temp file so main can read it.
+      if (imagePath.startsWith('blob:')) {
+        try {
+          const res = await fetch(imagePath);
+          const buf = await res.arrayBuffer();
+          // Save via IPC helper (reuse existing openImage? we add minimal inline impl if exposed)
+          const array = new Uint8Array(buf);
+          // Use a simple bridge: write a temp file using window.ollama.saveTempImage if available
+          if ((window as any).ollama?.saveTempImage) {
+            const savedPath = await (window as any).ollama.saveTempImage(Array.from(array));
+            if (savedPath) images = [savedPath];
+          } else {
+            // Fallback: cannot persist; keep blob URL (main will skip if not fs.existsSync)
+            images = [imagePath];
+          }
+        } catch (e) {
+          console.warn('Failed to persist blob image', e);
+          images = [imagePath];
+        }
+      } else {
+        images = [imagePath];
+      }
+    }
+    const newMsg: ChatMessage = { role: 'user', content: input, imagePath, images };
     const newMessages = [...baseMessages, newMsg];
     setMessages(newMessages);
     setInput('');

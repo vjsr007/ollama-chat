@@ -811,8 +811,36 @@ try {
   ipcMain.handle('mcp:directory-search-online', async (_e, query: string) => {
     try {
       const q = (query || '').trim();
-      if (!q) return { success: true, results: [] };
-      const url = `https://registry.npmjs.org/-/v1/search?text=${encodeURIComponent(q)}&size=30`;
+      // If no query, provide a small curated seed list of known MCP related packages (official + common community)
+      if (!q) {
+        const curated = [
+          '@modelcontextprotocol/server-filesystem',
+          '@modelcontextprotocol/server-git',
+          '@modelcontextprotocol/server-shell',
+          '@modelcontextprotocol/server-web',
+          '@modelcontextprotocol/server-processes'
+        ];
+        const mappedCurated = curated.map(name => {
+          const installed = fs.existsSync(path.join(process.cwd(),'node_modules', name, 'package.json'));
+          let version: string | undefined;
+            if (installed) { try { version = JSON.parse(fs.readFileSync(path.join(process.cwd(),'node_modules', name, 'package.json'),'utf8')).version; } catch {} }
+          return {
+            id: name,
+            package: name,
+            name,
+            description: 'Curated MCP server package',
+            website: `https://www.npmjs.com/package/${name}`,
+            repo: undefined,
+            reliability: 4,
+            tags: ['official','curated','online'],
+            installed,
+            version
+          };
+        });
+        return { success: true, results: mappedCurated };
+      }
+      const broadened = q + ' mcp server modelcontextprotocol';
+      const url = `https://registry.npmjs.org/-/v1/search?text=${encodeURIComponent(broadened)}&size=50`;
       const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
       if (!res.ok) return { success: false, error: 'npm registry error ' + res.status };
       const data = await res.json();
@@ -836,7 +864,7 @@ try {
           installed,
           version
         };
-      }).filter((r: any) => /modelcontextprotocol|mcp|server/i.test(r.name + ' ' + r.description));
+  }).filter((r: any) => /modelcontextprotocol|mcp|server/i.test(r.name + ' ' + r.description));
       return { success: true, results: mapped };
     } catch (e:any) {
       return { success: false, error: e.message || String(e) };

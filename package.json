@@ -38,6 +38,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.17.3",
     "@types/prismjs": "^1.26.5",
+    "@upstash/context7-mcp": "^1.0.16",
     "axios": "^1.7.2",
     "chokidar": "^3.6.0",
     "cors": "^2.8.5",

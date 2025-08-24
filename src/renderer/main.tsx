@@ -59,10 +59,14 @@ const App: React.FC = () => {
   const [fallbackError, setFallbackError] = useState<string | null>(null);
   // HQ audio capture (raw PCM -> WAV) option
   const [hqAudio, setHqAudio] = useState(false);
+  const [hqSampleRate, setHqSampleRate] = useState<number>(16000); // target output (16k default, can switch to 24k)
+  const [vadEnabled, setVadEnabled] = useState<boolean>(true);
   const audioContextRef = useRef<AudioContext | null>(null);
   const scriptNodeRef = useRef<ScriptProcessorNode | null>(null); // ScriptProcessor still widely supported; AudioWorklet would be ideal
   const pcmChunksRef = useRef<Float32Array[]>([]);
   const sourceStreamRef = useRef<MediaStream | null>(null);
+  const vadStartedRef = useRef(false);
+  const lastSpeechTimeRef = useRef<number>(0);
   // Whisper endpoint (fallback STT). Migration: auto-correct older saved endpoint (port 5005 /transcribe) to the new OpenAI-compatible path on 9000.
   const [whisperEndpoint, setWhisperEndpoint] = useState<string>(() => {
     const saved = localStorage.getItem('whisper-endpoint');
@@ -355,8 +359,31 @@ const App: React.FC = () => {
         pcmChunksRef.current = [];
         processor.onaudioprocess = (e) => {
           const input = e.inputBuffer.getChannelData(0);
-            // clone
-          pcmChunksRef.current.push(new Float32Array(input));
+          const cloned = new Float32Array(input);
+          pcmChunksRef.current.push(cloned);
+          if (vadEnabled) {
+            // Simple energy-based VAD
+            let sumSq = 0;
+            for (let i=0;i<cloned.length;i++) { const v = cloned[i]; sumSq += v*v; }
+            const rms = Math.sqrt(sumSq / cloned.length);
+            const now = performance.now();
+            const startThreshold = 0.004; // adjust based on mic level
+            const contThreshold = 0.0025;
+            if (!vadStartedRef.current && rms > startThreshold) {
+              vadStartedRef.current = true;
+              lastSpeechTimeRef.current = now;
+              console.log('🎙️ VAD: speech started (rms:', rms.toFixed(4), ')');
+            } else if (vadStartedRef.current) {
+              if (rms > contThreshold) {
+                lastSpeechTimeRef.current = now;
+              } else if (now - lastSpeechTimeRef.current > 1500) { // 1.5s silence
+                console.log('🎙️ VAD: auto-stop after silence');
+                vadStartedRef.current = false;
+                // Use async to avoid stopping mid-callback
+                setTimeout(()=> stopFallbackRecording(), 20);
+              }
+            }
+          }
         };
         source.connect(processor);
         processor.connect(ctx.destination);
@@ -400,9 +427,22 @@ const App: React.FC = () => {
       const merged = new Float32Array(totalLength);
       let offset = 0; for (const c of pcmChunksRef.current) { merged.set(c, offset); offset += c.length; }
       // Downsample to 16k for Whisper efficiency
-      const ds = downsampleBuffer(merged, sampleRate, 16000);
-      const wavBlob = encodeWav(ds, 16000);
-      console.log('🎙️ HQ WAV size:', wavBlob.size, 'durationApprox(s):', (ds.length/16000).toFixed(2));
+      const targetRate = hqSampleRate;
+      const ds = downsampleBuffer(merged, sampleRate, targetRate);
+      // RMS normalization
+      let sumSq = 0; for (let i=0;i<ds.length;i++){ const v = ds[i]; sumSq += v*v; }
+      const rms = Math.sqrt(sumSq/ds.length) || 1e-6;
+      const targetRms = 0.08; // ~ -22 dBFS
+      let gain = targetRms / rms;
+      const maxGain = 5.0; if (gain > maxGain) gain = maxGain;
+      if (gain > 1.05) {
+        for (let i=0;i<ds.length;i++){ ds[i] = Math.max(-1, Math.min(1, ds[i]*gain)); }
+        console.log('🎙️ Normalized audio RMS from', rms.toFixed(4), 'to target', targetRms, 'gain', gain.toFixed(2));
+      } else {
+        console.log('🎙️ RMS within range', rms.toFixed(4), 'no significant gain applied');
+      }
+      const wavBlob = encodeWav(ds, targetRate);
+      console.log('🎙️ HQ WAV size:', wavBlob.size, 'durationApprox(s):', (ds.length/targetRate).toFixed(2), 'targetRate:', targetRate);
       setIsRecording(false);
       sourceStreamRef.current?.getTracks().forEach(t=>t.stop());
       transcribeFallbackAudio(wavBlob);
@@ -1125,6 +1165,22 @@ const App: React.FC = () => {
           <label className="autosend-toggle" title="Audio de alta calidad (WAV 16k)">
             <input type="checkbox" checked={hqAudio} onChange={e=>setHqAudio(e.target.checked)} /> HQ
           </label>
+          {hqAudio && (
+            <>
+              <label className="autosend-toggle" title="Voice Activity Detection (auto stop silencio)">
+                <input type="checkbox" checked={vadEnabled} onChange={e=>setVadEnabled(e.target.checked)} /> VAD
+              </label>
+              <select
+                value={hqSampleRate}
+                onChange={e=>setHqSampleRate(parseInt(e.target.value))}
+                className="hq-sr-select"
+                title="Sample rate de salida para Whisper"
+              >
+                <option value={16000}>16k</option>
+                <option value={24000}>24k</option>
+              </select>
+            </>
+          )}
           {isRecording && <div className="listening-indicator" title="Escuchando (reinicio automático activo)">🔴</div>}
         </div>
       </div>

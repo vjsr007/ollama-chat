@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
 import path from 'path';
 import fs from 'fs';
+import { exec } from 'child_process';
 import { McpManager } from '../shared/infrastructure/mcp/McpManager';
 import { mcpSecretStore } from './mcp-secrets';
 import ToolConfigManager from './tool-config';
@@ -371,6 +372,214 @@ ipcMain.handle('mcp:get-tools', async () => {
   }
 });
 
+// Utility to collect MCP package names from config (npx servers)
+function gatherMcpPackages(): string[] {
+  try {
+    const cfgPath = path.join(process.cwd(), 'mcp-servers.json');
+    if (!fs.existsSync(cfgPath)) return [];
+    const raw = JSON.parse(fs.readFileSync(cfgPath,'utf8'));
+    const servers = raw.servers || {};
+    const pkgs = new Set<string>();
+    for (const key of Object.keys(servers)) {
+      const s = servers[key];
+      if (s?.command === 'npx' && Array.isArray(s.args) && s.args[0]?.startsWith('@modelcontextprotocol/')) {
+        pkgs.add(s.args[0]);
+      }
+    }
+    return Array.from(pkgs);
+  } catch { return []; }
+}
+
+// Infer implicit dependencies for non-npx local integration servers.
+// This lets the dependency checker show something meaningful for servers that
+// run local scripts (e.g. Playwright) but still require certain npm packages.
+function inferImplicitDeps(server: any): string[] {
+  const out = new Set<string>();
+  // 1. Explicit declarations in config (prefer explicit over heuristics)
+  const explicitArrays = [server.dependencies, server.deps, server.requiredPackages];
+  for (const arr of explicitArrays) {
+    if (Array.isArray(arr)) arr.forEach((p: any) => { if (typeof p === 'string' && p.trim()) out.add(p.trim()); });
+  }
+  // 2. Heuristics (only add if not already declared)
+  const id = (server.id || '').toLowerCase();
+  const name = (server.name || '').toLowerCase();
+  const cmd = (server.command || '').toLowerCase();
+  const argsJoined = Array.isArray(server.args) ? server.args.join(' ').toLowerCase() : '';
+  // Playwright
+  if ([id,name,cmd,argsJoined].some(s => s.includes('playwright'))) out.add('playwright');
+  // Puppeteer
+  if ([id,name,cmd,argsJoined].some(s => s.includes('puppeteer'))) out.add('puppeteer');
+  // Axios or node-fetch usage hints (very light heuristic)
+  if (name.includes('fetch') || id.includes('fetch')) out.add('node-fetch');
+  // Add more domain specific heuristics here if needed
+  return Array.from(out);
+}
+
+// Get metadata about a specific MCP server (safe subset)
+ipcMain.handle('mcp:get-server-metadata', async (_e, id: string) => {
+  try {
+    const internalMap: Map<string, any> = (mcpManager as any).servers;
+    const state = internalMap.get(id);
+    if (!state) return { success: false, error: 'Server not found' };
+    const cfg = state.config;
+    const server: any = {
+      id: cfg.id,
+      name: cfg.name,
+      type: cfg.type,
+      status: state.status,
+      command: cfg.command,
+      args: cfg.args,
+      enabled: cfg.enabled,
+      category: cfg.category,
+      priority: cfg.priority,
+      toolCount: (state.tools || []).length,
+      tools: (state.tools || []).map((t: any) => t.name),
+      envKeys: cfg.env ? Object.keys(cfg.env) : [],
+      secretEnvKeys: cfg.secretEnvKeys || [],
+      hasSecrets: (cfg.secretEnvKeys || []).length > 0,
+      pid: state.process?.pid || null,
+    };
+    // Detect package if npx pattern
+    let pkg: string | null = null;
+    if (cfg.command === 'npx' && Array.isArray(cfg.args) && cfg.args[0]) pkg = cfg.args[0];
+    if (pkg) {
+      const pkgPath = path.join(process.cwd(), 'node_modules', pkg, 'package.json');
+      server.package = pkg;
+      server.packageInstalled = fs.existsSync(pkgPath);
+      if (server.packageInstalled) {
+        try { server.packageVersion = JSON.parse(fs.readFileSync(pkgPath,'utf8')).version; } catch {/* ignore */}
+      }
+    }
+    // Include declared/implicit dependencies for local/integration servers
+    const inferred = inferImplicitDeps(cfg);
+    if (inferred.length) {
+      server.dependencies = inferred.map(dep => {
+        const depPath = path.join(process.cwd(), 'node_modules', dep, 'package.json');
+        if (fs.existsSync(depPath)) {
+          try {
+            const v = JSON.parse(fs.readFileSync(depPath,'utf8')).version;
+            return { name: dep, installed: true, version: v };
+          } catch {
+            return { name: dep, installed: true };
+          }
+        }
+        return { name: dep, installed: false };
+      });
+      // Backward compatibility (old field name used previously in UI code before generalization)
+      server.implicitDependencies = server.dependencies;
+    }
+    return { success: true, metadata: server };
+  } catch (e:any) {
+    return { success: false, error: e.message || String(e) };
+  }
+});
+
+// Check dependencies (package) for a specific server
+ipcMain.handle('mcp:check-server-deps', async (_e, id: string) => {
+  try {
+    const servers = mcpManager.getServers();
+    const s = servers.find(sv => sv.id === id);
+    if (!s) return { success: false, error: 'Server not found' };
+    // Case 1: npx based official MCP package
+    if (s.command === 'npx' && s.args && s.args[0] && s.args[0].startsWith('@modelcontextprotocol/')) {
+      const pkg = s.args[0];
+      const { spawn } = require('child_process');
+      const result = await new Promise(resolve => {
+        const child = spawn('npm', ['view', pkg, 'version'], { stdio: ['ignore','pipe','pipe'] });
+        let out=''; let err='';
+        child.stdout.on('data', (d:Buffer)=> out+=d.toString());
+        child.stderr.on('data', (d:Buffer)=> err+=d.toString());
+        child.on('exit', (code:number|null) => {
+          if (code === 0) resolve({ id: s.id, package: pkg, status: 'installed', version: out.trim() });
+          else resolve({ id: s.id, package: pkg, status: 'missing', error: err.trim() });
+        });
+        child.on('error', (e:Error) => resolve({ id: s.id, package: pkg, status: 'error', error: e.message }));
+      });
+      return { success: true, results: [result] };
+    }
+    // Case 2: declared/implicit local dependencies
+    const declared = inferImplicitDeps(s);
+    if (declared.length) {
+      const results = declared.map(dep => {
+        const depPath = path.join(process.cwd(), 'node_modules', dep, 'package.json');
+        if (fs.existsSync(depPath)) {
+          try {
+            const v = JSON.parse(fs.readFileSync(depPath,'utf8')).version;
+            return { id: s.id, package: dep, status: 'installed', version: v };
+          } catch {
+            return { id: s.id, package: dep, status: 'installed' };
+          }
+        }
+        return { id: s.id, package: dep, status: 'missing' };
+      });
+      return { success: true, results };
+    }
+    // Case 3: no detectable package
+    return { success: true, results: [{ id: s.id, package: null, status: 'no-package' }] };
+  } catch (e:any) {
+    return { success: false, error: e.message || String(e) };
+  }
+});
+
+// Install dependency package for a specific server
+ipcMain.handle('mcp:install-server-deps', async (_e, id: string) => {
+  try {
+    const servers = mcpManager.getServers();
+    const s = servers.find(sv => sv.id === id);
+    if (!s) return { success: false, error: 'Server not found' };
+    // Official npx package path
+    if (s.command === 'npx' && s.args && s.args[0] && s.args[0].startsWith('@modelcontextprotocol/')) {
+      const pkg = s.args[0];
+      const pkgPath = path.join(process.cwd(), 'node_modules', pkg, 'package.json');
+      if (fs.existsSync(pkgPath)) return { success: true, installed: [], message: 'Already installed' };
+      const cmd = `npm install ${pkg}`;
+      return await new Promise(resolve => {
+        exec(cmd, { cwd: process.cwd(), shell: process.platform === 'win32' ? true : '/bin/bash' as any }, (err: any, stdout: string, stderr: string) => {
+          if (err) return resolve({ success: false, error: err.message, stdout, stderr });
+          resolve({ success: true, installed: [pkg], stdout });
+        });
+      });
+    }
+  // Declared/implicit dependencies path
+  const declared = inferImplicitDeps(s);
+  if (!declared.length) return { success: false, error: 'Server has no associated npm package' };
+  // Determine which declared deps are missing
+  const missing = declared.filter(dep => !fs.existsSync(path.join(process.cwd(), 'node_modules', dep, 'package.json')));
+    if (!missing.length) return { success: true, installed: [], message: 'Already installed' };
+    const cmd = `npm install ${missing.join(' ')}`;
+    return await new Promise(resolve => {
+      exec(cmd, { cwd: process.cwd(), shell: process.platform === 'win32' ? true : '/bin/bash' as any }, (err: any, stdout: string, stderr: string) => {
+        if (err) return resolve({ success: false, error: err.message, stdout, stderr });
+        resolve({ success: true, installed: missing, stdout });
+      });
+    });
+  } catch (e:any) {
+    return { success: false, error: e.message || String(e) };
+  }
+});
+
+
+// Install a specific MCP package (or all missing)
+ipcMain.handle('mcp:install-packages', async (_e, payload: { names?: string[] } | string[] ) => {
+  const all = gatherMcpPackages();
+  const explicitNames = Array.isArray(payload) ? payload : payload?.names;
+  const targets = (explicitNames && explicitNames.length) ? explicitNames : all.filter(p => !fs.existsSync(path.join(process.cwd(),'node_modules', p)));
+  if (!targets.length) return { success: true, installed: [], message: 'No packages to install' };
+  const cmd = `npm install ${targets.join(' ')}`;
+  console.log('📦 Installing MCP packages:', targets.join(', '));
+  return await new Promise(resolve => {
+    exec(cmd, { cwd: process.cwd(), shell: process.platform === 'win32' ? true : '/bin/bash' as any }, (err: any, stdout: string, stderr: string) => {
+      if (err) {
+        console.error('❌ MCP install error', err);
+        resolve({ success: false, error: err.message, stdout, stderr });
+        return;
+      }
+      console.log('✅ MCP install completed');
+      resolve({ success: true, installed: targets, stdout });
+    });
+  });
+});
+
 ipcMain.handle('mcp:call-tool', async (event, call) => {
   console.log('🔧 Main: Calling MCP tool:', call.tool);
   try {
@@ -525,7 +734,7 @@ ipcMain.handle('mcp:check-packages', async () => {
         child.stdout.on('data', (d: Buffer) => { out += d.toString(); });
         child.stderr.on('data', (d: Buffer) => { err += d.toString(); });
         child.on('exit', (code: number | null) => {
-          if (code === 0) resolve({ id: s.id, package: pkg, status: 'found', version: out.trim() });
+          if (code === 0) resolve({ id: s.id, package: pkg, status: 'installed', version: out.trim() });
           else resolve({ id: s.id, package: pkg, status: 'missing', error: err.trim() });
         });
         child.on('error', (e: Error) => resolve({ id: s.id, package: pkg, status: 'error', error: e.message }));
@@ -578,6 +787,95 @@ ipcMain.handle('logs:get-recent', async (event, limit = 500) => {
 ipcMain.handle('logs:clear', async () => {
   logBuffer.length = 0; return { success: true };
 });
+
+// MCP directory (search & metadata) handlers
+try {
+  const { searchMcpDirectory, mcpDirectory } = require('../../shared/domain/mcpDirectory');
+  ipcMain.handle('mcp:directory-search', async (_e, term: string) => {
+    try {
+      const results = searchMcpDirectory(term || '');
+      // augment with install status
+      const augmented = results.map((r: any) => {
+        const pkgPath = path.join(process.cwd(), 'node_modules', r.package, 'package.json');
+        let installed = false; let version: string | undefined;
+        if (fs.existsSync(pkgPath)) {
+          installed = true;
+          try { version = JSON.parse(fs.readFileSync(pkgPath,'utf8')).version; } catch { /* ignore */ }
+        }
+        return { ...r, installed, version };
+      });
+      return { success: true, results: augmented };
+    } catch (e:any) { return { success: false, error: e.message || String(e) }; }
+  });
+  // Online npm registry search (lightweight). Filters to packages mentioning MCP related terms.
+  ipcMain.handle('mcp:directory-search-online', async (_e, query: string) => {
+    try {
+      const q = (query || '').trim();
+      if (!q) return { success: true, results: [] };
+      const url = `https://registry.npmjs.org/-/v1/search?text=${encodeURIComponent(q)}&size=30`;
+      const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+      if (!res.ok) return { success: false, error: 'npm registry error ' + res.status };
+      const data = await res.json();
+      const objs = Array.isArray(data.objects) ? data.objects : [];
+      const mapped = objs.map((o: any) => {
+        const p = o.package || {};
+        const name = p.name || '';
+        const desc = p.description || '';
+        const isOfficial = name.startsWith('@modelcontextprotocol/');
+        const installed = fs.existsSync(path.join(process.cwd(),'node_modules', name, 'package.json'));
+        let version: string | undefined = p.version;
+        return {
+          id: name,
+          package: name,
+          name,
+          description: desc,
+          website: (p.links && (p.links.homepage || p.links.npm)) || undefined,
+          repo: p.links?.repository || undefined,
+          reliability: isOfficial ? 4 : 2,
+          tags: [isOfficial ? 'official':'community','online'],
+          installed,
+          version
+        };
+      }).filter((r: any) => /modelcontextprotocol|mcp|server/i.test(r.name + ' ' + r.description));
+      return { success: true, results: mapped };
+    } catch (e:any) {
+      return { success: false, error: e.message || String(e) };
+    }
+  });
+  ipcMain.handle('mcp:directory-get', async (_e, id: string) => {
+    try {
+      const entry = mcpDirectory.find((e: any) => e.id === id || e.package === id);
+      if (!entry) return { success: false, error: 'Not found' };
+      const pkgPath = path.join(process.cwd(), 'node_modules', entry.package, 'package.json');
+      let installed = false; let version: string | undefined;
+      if (fs.existsSync(pkgPath)) {
+        installed = true; try { version = JSON.parse(fs.readFileSync(pkgPath,'utf8')).version; } catch { /* ignore */ }
+      }
+      return { success: true, entry: { ...entry, installed, version } };
+    } catch (e:any) { return { success: false, error: e.message || String(e) }; }
+  });
+  ipcMain.handle('mcp:directory-readme', async (_e, pkg: string) => {
+    try {
+      if (!pkg) return { success: false, error: 'Package required' };
+      const base = path.join(process.cwd(), 'node_modules', pkg);
+      if (!fs.existsSync(base)) return { success: false, error: 'Not installed' };
+      // Try common README filenames
+      const candidates = ['README.md','readme.md','README.MD','Readme.md'];
+      let filePath: string | null = null;
+      for (const c of candidates) { const p = path.join(base, c); if (fs.existsSync(p)) { filePath = p; break; } }
+      if (!filePath) return { success: false, error: 'README not found' };
+      let content = fs.readFileSync(filePath,'utf8');
+      // Truncate large readme to avoid UI overload
+      const MAX_LEN = 40_000; // ~40KB
+      if (content.length > MAX_LEN) content = content.slice(0, MAX_LEN) + '\n\n...[truncated]';
+      return { success: true, content };
+    } catch (e:any) {
+      return { success: false, error: e.message || String(e) };
+    }
+  });
+} catch (e) {
+  console.warn('MCP directory module load failed', e);
+}
 
 // Tool configuration handlers
 ipcMain.handle('get-tool-config', () => {
@@ -807,10 +1105,300 @@ ipcMain.handle('external-models:validate-model', async (event, id) => {
 ipcMain.handle('external-models:generate', async (event, modelId: string, messages: any[]) => {
   console.log('💬 Main: External model generate request:', modelId, 'messages:', messages?.length || 0);
   try {
+    // ---------------------------------------------------------------------
+    // Timeout + logging utilities (5 minute cap per provider call)
+    // ---------------------------------------------------------------------
+    const MODEL_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+    const ABSOLUTE_HANDLER_TIMEOUT_MS = 6 * 60 * 1000; // hard cap for entire handler
+    const handlerStart = Date.now();
+    const stageDurations: Record<string, number> = {};
+    let absoluteTimeoutHit = false;
+    const absoluteTimer = setTimeout(() => {
+      absoluteTimeoutHit = true;
+      console.warn(`🛑 Handler absolute timeout reached (${ABSOLUTE_HANDLER_TIMEOUT_MS}ms) model=${modelId}`);
+    }, ABSOLUTE_HANDLER_TIMEOUT_MS);
+  const callWithTimeout = async <T>(stage: string, fn: () => Promise<T>): Promise<T & { __timeout?: boolean }> => {
+      const start = Date.now();
+      console.log(`⏱️  Model call START stage=${stage} model=${modelId}`);
+      let timer: NodeJS.Timeout | undefined = undefined;
+      try {
+        const result = await Promise.race<Promise<T | { __timeout: true }>>([
+          fn(),
+          new Promise(resolve => {
+            timer = setTimeout(() => {
+              console.warn(`⏳ Model call TIMEOUT stage=${stage} model=${modelId} after ${MODEL_TIMEOUT_MS}ms`);
+              resolve({ __timeout: true });
+            }, MODEL_TIMEOUT_MS);
+          }) as any
+        ]);
+        const dur = Date.now() - start;
+    stageDurations[stage] = dur;
+        if ((result as any).__timeout) {
+          console.warn(`🛑 Model call ABORTED (timeout) stage=${stage} duration=${dur}ms model=${modelId}`);
+          return result as any;
+        }
+        console.log(`✅ Model call END stage=${stage} duration=${dur}ms model=${modelId}`);
+        return result as any;
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+    };
     // Insert system prompt if provided by first message role detection (renderer already may include it)
-    const output = await externalModelManager.generateChatCompletion(modelId, messages);
-    console.log('✅ Main: External model generation success, length:', output.length);
-    return { success: true, content: output };
+    const modelMeta = externalModelManager.getModel(modelId);
+    let workingMessages = [...messages];
+    if (modelMeta?.provider === 'anthropic') {
+      // Build tool guide
+      const allTools = mcpManager.getAllTools();
+      const toolNames = allTools.map(t => t.name);
+      const enabledToolNames = toolConfigManager.getEnabledToolsForModel(modelId, toolNames);
+      const enabledTools = allTools.filter(t => enabledToolNames.includes(t.name));
+      const maxTools = 20;
+      const summarized = enabledTools.slice(0, maxTools).map(t => `${t.name}: ${(t.description||'').replace(/\s+/g,' ').slice(0,80)}`);
+      const triggerKeywords = ['listar','list','leer','read','archivo','file','carpeta','dir','navegar','browser','web','screenshot','captura','process','proceso','service','servicio','port','puerto','network','export','guardar','save','txt','command','comando'];
+      const lastUser = [...workingMessages].reverse().find(m => m.role==='user');
+      const lower = (lastUser?.content||'').toLowerCase();
+      const userLikelyNeedsTool = triggerKeywords.some(k=>lower.includes(k));
+      const existingSystem = workingMessages.find(m=>m.role==='system');
+      const toolGuide = [
+        'You can invoke system / web / file tools. When an external action is needed (filesystem, listing, reading, exporting, running commands, browser automation, screenshot), DO NOT fabricate output. Instead emit JSON with a tool_calls array. Example:',
+        '{"tool_calls":[{"name":"system_list_directory","arguments":{"path":"C:/"}}]}',
+        'Only one most relevant tool first. After tool results are appended, continue reasoning. Tools available (name: purpose):',
+        summarized.join('\n'),
+        'If no tool is needed, answer normally. Responde en el idioma del usuario.'
+      ].join('\n');
+      if (!existingSystem || !/tool_calls/i.test(existingSystem.content)) {
+        if (existingSystem) existingSystem.content += '\n' + toolGuide; else workingMessages.unshift({ role:'system', content: toolGuide });
+      } else if (userLikelyNeedsTool) {
+        // Add reinforcing system
+        workingMessages.push({ role:'system', content:'REMINDER: Output JSON tool_calls for actions instead of textual assumptions.' });
+      }
+    }
+    const result = await callWithTimeout('initial', () => externalModelManager.generateChatCompletion(modelId, workingMessages));
+    if ((result as any).__timeout) {
+      return { success: false, timeout: true, stage: 'initial', ms: MODEL_TIMEOUT_MS, error: `Model call timed out after ${MODEL_TIMEOUT_MS}ms` };
+    }
+    // JSON tool_calls fallback parsing for Anthropic if no structured toolCalls returned
+    if (modelMeta?.provider==='anthropic' && !result.toolCalls && typeof result.content === 'string' && result.content.includes('"tool_calls"')) {
+      try {
+        const text = result.content.trim();
+        // Attempt to extract JSON block containing tool_calls
+        let jsonCandidate = text;
+        if (!(jsonCandidate.startsWith('{') && jsonCandidate.endsWith('}'))) {
+          const first = jsonCandidate.indexOf('{');
+            const last = jsonCandidate.lastIndexOf('}');
+          if (first>=0 && last>first) jsonCandidate = jsonCandidate.substring(first,last+1);
+        }
+        const parsed = JSON.parse(jsonCandidate);
+        if (parsed.tool_calls && Array.isArray(parsed.tool_calls)) {
+          const toolCalls = parsed.tool_calls.map((c:any,i:number)=>({
+            id: c.id || 'anthropic_json_tool_'+i,
+            type:'function',
+            function:{ name: c.name || c.function?.name, arguments: c.arguments || c.function?.arguments || {} }
+          }));
+          if (toolCalls.length) {
+            console.log('🧪 Parsed JSON tool_calls from Anthropic content:', toolCalls.length);
+            result.toolCalls = toolCalls;
+            result.needsToolExecution = true;
+          }
+        }
+      } catch (e) {
+        console.warn('⚠️ Failed to parse JSON tool_calls from Anthropic content:', (e as any).message);
+      }
+    }
+    // Heuristic enforcement: if Anthropic likely needed a tool (user intent) but produced a narrative claiming action without tool_calls, force a re-prompt.
+    if (modelMeta?.provider==='anthropic' && !result.toolCalls) {
+      const lastUser = [...workingMessages].reverse().find(m => m.role==='user');
+      const userText = (lastUser?.content||'').toLowerCase();
+      const triggerKeywords = ['listar','list','leer','read','archivo','file','carpeta','dir','navegar','browser','web','screenshot','captura','process','proceso','service','servicio','port','puerto','network','export','guardar','save','txt','command','comando','abrir','open'];
+      const userLikelyNeedsTool = triggerKeywords.some(k=>userText.includes(k));
+      const contentLower = (result.content||'').toLowerCase();
+      // Phrases indicating the model is describing an action instead of calling a tool
+      const hallucinationIndicators = [
+        'he tomado','he capturado','i have captured','screenshot','listado de archivos','file listing','abrí','he abierto','i opened','navegué','i navigated','ejecuté','i executed','comando ejecutado','proceso iniciado','captura guardada','saved screenshot','guardado en','saved at'
+      ];
+      const seemsSimulated = hallucinationIndicators.some(p=>contentLower.includes(p));
+      const alreadyForced = workingMessages.some(m=>m.role==='system' && /FORCE_TOOL_CALLS_ATTEMPT/.test(m.content));
+      if (userLikelyNeedsTool && seemsSimulated && !alreadyForced) {
+        console.log('⚠️ Anthropic response appears to simulate tool execution. Forcing tool_calls re-prompt.');
+        const forceInstruction = [
+          'FORCE_TOOL_CALLS_ATTEMPT: You described performing an external action but did not emit tool_calls.',
+          'Respond NOW with ONLY valid JSON: {"tool_calls":[{"name":"<tool_name>","arguments":{...}}]}',
+          'Choose exactly ONE most relevant tool from the provided list previously. No explanation, no natural language, JSON only.'
+        ].join('\n');
+        const forcedMessages = [...workingMessages, { role:'assistant', content: result.content||'' }, { role:'system', content: forceInstruction }, { role:'user', content:'Output ONLY JSON with tool_calls now.' }];
+        const forcedResult = await callWithTimeout('forced-reprompt', () => externalModelManager.generateChatCompletion(modelId, forcedMessages));
+        if ((forcedResult as any).__timeout) {
+          console.warn('⚠️ Forced re-prompt timed out; proceeding with original content.');
+        }
+        // Attempt JSON parsing again
+        if (!forcedResult.toolCalls && typeof forcedResult.content==='string' && forcedResult.content.includes('"tool_calls"')) {
+          try {
+            let jsonCandidate = forcedResult.content.trim();
+            if (!(jsonCandidate.startsWith('{') && jsonCandidate.endsWith('}'))) {
+              const first = jsonCandidate.indexOf('{');
+              const last = jsonCandidate.lastIndexOf('}');
+              if (first>=0 && last>first) jsonCandidate = jsonCandidate.substring(first,last+1);
+            }
+            const parsed = JSON.parse(jsonCandidate);
+            if (parsed.tool_calls && Array.isArray(parsed.tool_calls)) {
+              forcedResult.toolCalls = parsed.tool_calls.map((c:any,i:number)=>({
+                id: c.id || 'anthropic_forced_tool_'+i,
+                type:'function',
+                function:{ name: c.name || c.function?.name, arguments: c.arguments || c.function?.arguments || {} }
+              }));
+              if (forcedResult.toolCalls.length) forcedResult.needsToolExecution = true;
+            }
+          } catch (e) {
+            console.warn('⚠️ Forced tool_calls JSON parse failed:', (e as any).message);
+          }
+        }
+        // Replace original result with forcedResult if we obtained toolCalls
+        if (forcedResult.toolCalls && forcedResult.toolCalls.length) {
+          console.log('✅ Forced tool_calls acquired from Anthropic after re-prompt:', forcedResult.toolCalls.length);
+          Object.assign(result, forcedResult); // mutate result to reuse downstream logic
+        } else {
+          console.log('⚠️ Re-prompt did not yield tool_calls; proceeding with original content.');
+        }
+      }
+    }
+    // ---------------- Multi-cycle tool execution loop ----------------
+    if (result.needsToolExecution && result.toolCalls) {
+  // Increased per user request (was 6). Allows longer multi-step automation chains.
+  const MAX_CYCLES = 50;
+      let cycle = 0;
+      let currentResult: any = result;
+      let lastToolSignature = '';
+      let accumulatedToolExecutions: any[] = [];
+      let working = [...workingMessages];
+      while (currentResult.needsToolExecution && currentResult.toolCalls && cycle < MAX_CYCLES) {
+        cycle++;
+        console.log(`🔁 Tool cycle ${cycle} starting with ${currentResult.toolCalls.length} toolCalls`);
+        const toolResults: any[] = [];
+        // Execute each requested tool sequentially
+        for (const toolCall of currentResult.toolCalls) {
+          try {
+            const sig = toolCall.function.name + ':' + JSON.stringify(toolCall.function.arguments||{});
+            const toolResult = await mcpManager.callTool({
+              tool: toolCall.function.name,
+              args: toolCall.function.arguments,
+              serverId: undefined
+            });
+            toolResults.push({ role: 'tool', name: toolCall.function.name, signature: sig, content: JSON.stringify(toolResult) });
+            accumulatedToolExecutions.push({ cycle, name: toolCall.function.name, args: toolCall.function.arguments, ok: true });
+          } catch (e) {
+            const errMsg = e instanceof Error ? e.message : String(e);
+            toolResults.push({ role: 'tool', name: toolCall.function.name, content: JSON.stringify({ error: errMsg }) });
+            accumulatedToolExecutions.push({ cycle, name: toolCall.function.name, args: toolCall.function.arguments, ok: false, error: errMsg });
+          }
+        }
+        // Detect repeated identical single-tool loop
+        if (toolResults.length === 1) {
+          const sig = toolResults[0].name + ':' + toolResults[0].content.slice(0,120);
+          if (sig === lastToolSignature) {
+            console.warn('⚠️ Repeated identical tool result detected; breaking loop to avoid infinite cycle.');
+            break;
+          }
+          lastToolSignature = sig;
+        }
+        // Condense tool results for Anthropic
+        let followUpMessages = [...working, { role: 'assistant', content: currentResult.content || '' }, ...toolResults];
+        if (modelMeta?.provider === 'anthropic') {
+          try {
+            const sanitizeBase64 = (str: string) => str.replace(/"([a-zA-Z0-9_]*base64|image_base64|screenshot|data)"\s*:\s*"([A-Za-z0-9+/=]{120,})"/g, (_m, key, val) => `"${key}":"[BASE64_${val.length}_TRUNCATED]"`);
+            const deepExtractInner = (parsed: any): string | null => {
+              try {
+                const innerText = parsed?.result?.content?.[0]?.text || parsed?.content?.[0]?.text;
+                if (typeof innerText === 'string') {
+                  let maybe = innerText.trim();
+                  if (maybe.startsWith('{') && maybe.includes('base64')) {
+                    try {
+                      const innerObj = JSON.parse(maybe);
+                      for (const k of Object.keys(innerObj)) {
+                        if (/base64|screenshot|image/i.test(k) && typeof innerObj[k] === 'string') {
+                          innerObj[k] = `[BASE64_${innerObj[k].length}_TRUNCATED]`;
+                        }
+                      }
+                      return JSON.stringify(innerObj, null, 2);
+                    } catch {}
+                  }
+                  return innerText;
+                }
+              } catch {}
+              return null;
+            };
+            const condensed = toolResults.map((tr: any, idx: number) => {
+              let raw = tr.content;
+              try {
+                raw = sanitizeBase64(raw);
+                const parsed = JSON.parse(raw);
+                const inner = deepExtractInner(parsed);
+                const rawTrunc = raw.length > 1000 ? raw.slice(0,1000)+'...<truncated>' : raw;
+                return `Cycle ${cycle} Tool #${idx+1} (${tr.name})\nRaw JSON (sanitized): ${rawTrunc}\nInner: ${(inner||'').slice(0,1200)}`;
+              } catch {
+                return `Cycle ${cycle} Tool #${idx+1} (${tr.name})\nRaw (sanitized): ${raw.slice(0,1000)}`;
+              }
+            }).join('\n\n');
+            const anthroToolMsg = { role: 'user', content: [
+              'RESULTADOS_DE_HERRAMIENTAS Ciclo '+cycle+'. Usa SOLO estos datos para el siguiente paso.',
+              condensed,
+              'Si todavía faltan pasos (navegar, buscar, screenshot, guardar archivos), pide / ejecuta la siguiente herramienta con JSON tool_calls. Si ya terminaste todo, entrega la explicación final y NO generes más tool_calls.'
+            ].join('\n\n') };
+            followUpMessages = [...working, { role: 'assistant', content: currentResult.content || '' }, anthroToolMsg];
+          } catch (e) {
+            console.warn('⚠️ Condense failure cycle', cycle, (e as any).message);
+          }
+        }
+        console.log(`🔁 Calling model for next cycle (cycle=${cycle})`);
+        const next = await callWithTimeout(`post-tools-cycle-${cycle}`, () => externalModelManager.generateChatCompletion(modelId, followUpMessages));
+        if ((next as any).__timeout) {
+          clearTimeout(absoluteTimer);
+            return { success: false, timeout: true, stage: `post-tools-cycle-${cycle}`, ms: MODEL_TIMEOUT_MS, partial: true, accumulatedToolExecutions, stageDurations };
+        }
+        // Attempt to parse further tool calls if provider Anthropic and raw content contains JSON
+        if (modelMeta?.provider==='anthropic' && !next.toolCalls && typeof next.content==='string' && next.content.includes('"tool_calls"')) {
+          try {
+            let jsonCandidate = next.content.trim();
+            if (!(jsonCandidate.startsWith('{') && jsonCandidate.endsWith('}'))) {
+              const first = jsonCandidate.indexOf('{');
+              const last = jsonCandidate.lastIndexOf('}');
+              if (first>=0 && last>first) jsonCandidate = jsonCandidate.substring(first,last+1);
+            }
+            const parsed = JSON.parse(jsonCandidate);
+            if (parsed.tool_calls && Array.isArray(parsed.tool_calls)) {
+              next.toolCalls = parsed.tool_calls.map((c:any,i:number)=>({
+                id: c.id || `anthropic_loop_tool_${cycle}_${i}`,
+                type:'function',
+                function:{ name: c.name || c.function?.name, arguments: c.arguments || c.function?.arguments || {} }
+              }));
+              if (next.toolCalls.length) next.needsToolExecution = true;
+            }
+          } catch (e) {
+            console.warn('⚠️ Loop JSON parse failed cycle', cycle, (e as any).message);
+          }
+        }
+        // Update working history (append assistant content to context for future reasoning)
+        working = [...working, { role:'assistant', content: (next as any).content || '' }];
+        currentResult = next;
+        // Break condition: if model signals completion (no toolCalls or provides final answer markers)
+        if (!currentResult.toolCalls || !currentResult.needsToolExecution) {
+          console.log(`✅ Tool cycle loop completed at cycle ${cycle}`);
+          clearTimeout(absoluteTimer);
+          return { success: true, content: currentResult.content || currentResult, toolCycles: cycle, accumulatedToolExecutions, stageDurations, totalMs: Date.now()-handlerStart };
+        }
+        if (absoluteTimeoutHit) {
+          console.warn('🛑 Absolute handler timeout hit during loop');
+          clearTimeout(absoluteTimer);
+          return { success:false, timeout:true, stage:'handler-absolute', partial:true, toolCycles: cycle, accumulatedToolExecutions, stageDurations };
+        }
+      }
+      // If loop ended due to cycle limit
+      clearTimeout(absoluteTimer);
+      return { success: true, content: currentResult.content || currentResult, toolCycles: cycle, loopTerminated: true, reason: 'max_cycles_or_break', accumulatedToolExecutions, stageDurations, totalMs: Date.now()-handlerStart };
+    }
+    const content = result.content ?? result;
+    console.log('✅ Main: External model generation success (no tools), length:', (content || '').length);
+    clearTimeout(absoluteTimer);
+    return { success: true, content, stageDurations, totalMs: Date.now() - handlerStart };
   } catch (error) {
     console.error('❌ Main: External model generation failed:', error);
     return { success: false, error: error instanceof Error ? error.message : String(error) };

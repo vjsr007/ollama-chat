@@ -436,7 +436,7 @@ export class ExternalModelManager {
     modelId: string,
     messages: any[],
     options?: { temperature?: number; maxTokens?: number }
-  ): Promise<string> {
+  ): Promise<any> { // may return toolCalls structure similar to OllamaClient
     const model = this.getModel(modelId);
     if (!model || !model.enabled) {
       throw new Error(`Model ${modelId} not found or disabled`);
@@ -444,29 +444,103 @@ export class ExternalModelManager {
     const apiKey = await this.getStoredKey(modelId);
     if (!apiKey) throw new Error(`No API key configured for model ${modelId} (fallback env var ${this.resolveEnvVarForProvider(model.provider) || 'N/A'})`);
 
+  // Pre-process messages for multimodal (image) support without altering original structures used elsewhere.
+  // Convention: each incoming message can optionally include:
+  //   message.images: string[] (file paths, data URLs, or raw base64 with optional mime prefix)
+  //   message.attachments: { type:'image', path?:string, data?:string, mimeType?:string }[]
+  // We keep original messages intact for other logic; provider-specific callers transform copies.
+  const processedMessages = this.enrichMessagesWithImages(messages);
+
     switch (model.provider) {
       case 'openai':
-        return await this.callOpenAI({ ...model, apiKey }, messages, options);
+        return { content: await this.callOpenAI({ ...model, apiKey }, processedMessages, options) };
       case 'anthropic':
-        return await this.callAnthropic({ ...model, apiKey }, messages, options);
+        return await this.callAnthropic({ ...model, apiKey }, processedMessages, options);
       case 'github-copilot':
-        return await this.callGitHubCopilot({ ...model, apiKey }, messages, options);
+        return { content: await this.callGitHubCopilot({ ...model, apiKey }, processedMessages, options) };
       case 'google':
-        return await this.callGoogle({ ...model, apiKey }, messages, options);
+        return { content: await this.callGoogle({ ...model, apiKey }, processedMessages, options) };
       case 'cohere':
-        return await this.callCohere({ ...model, apiKey }, messages, options);
+        return { content: await this.callCohere({ ...model, apiKey }, processedMessages, options) };
       case 'mistral':
-        return await this.callMistral({ ...model, apiKey }, messages, options);
+        return { content: await this.callMistral({ ...model, apiKey }, processedMessages, options) };
       case 'custom':
-        return await this.callOpenAI({ ...model, apiKey }, messages, options);
+        return { content: await this.callOpenAI({ ...model, apiKey }, processedMessages, options) };
       default:
         throw new Error(`Unsupported provider: ${model.provider}`);
     }
   }
 
+  // Helper to build multimodal friendly structure.
+  private enrichMessagesWithImages(messages: any[]) {
+    const MAX_IMAGE_BYTES = 4 * 1024 * 1024; // 4MB safety cap per image
+    const extToMime: Record<string,string> = { '.png':'image/png', '.jpg':'image/jpeg', '.jpeg':'image/jpeg', '.gif':'image/gif', '.webp':'image/webp', '.bmp':'image/bmp' };
+    return messages.map(orig => {
+      try {
+        const clone: any = { ...orig };
+        const imageSources: any[] = [];
+        const collect = (entry: any) => {
+          if (!entry) return;
+          if (typeof entry === 'string') {
+            imageSources.push({ source: entry });
+          } else if (entry.type === 'image') {
+            imageSources.push({ source: entry.path || entry.data, mimeType: entry.mimeType });
+          }
+        };
+        if (Array.isArray(clone.images)) clone.images.forEach(collect);
+        if (Array.isArray(clone.attachments)) clone.attachments.forEach(collect);
+        const processed: any[] = [];
+        for (const img of imageSources) {
+          let raw = img.source;
+            if (!raw) continue;
+          let mime = img.mimeType as string | undefined;
+          let base64: string | undefined;
+          if (raw.startsWith('data:')) {
+            // data URL
+            const m = raw.match(/^data:(.*?);base64,(.+)$/);
+            if (m) { mime = mime || m[1]; base64 = m[2]; }
+          } else if (/^([A-Za-z0-9+/=]+)$/.test(raw) && raw.length > 100) {
+            // Heuristic: treat as naked base64 (no mime)
+            base64 = raw;
+          } else if (fs.existsSync(raw)) {
+            const buf = fs.readFileSync(raw);
+            if (buf.length > MAX_IMAGE_BYTES) {
+              console.warn('[ExternalModels][images] Image too large, truncating (base64) size', buf.length, 'file', raw);
+              const slice = buf.slice(0, MAX_IMAGE_BYTES);
+              base64 = slice.toString('base64');
+            } else {
+              base64 = buf.toString('base64');
+            }
+            if (!mime) {
+              const ext = path.extname(raw).toLowerCase();
+              mime = extToMime[ext] || 'image/png';
+            }
+          }
+          if (base64) processed.push({ mime, base64 });
+        }
+        clone._imageParts = processed; // internal use only
+        return clone;
+      } catch (e) {
+        console.warn('[ExternalModels][images] Failed processing images for message', e);
+        return orig;
+      }
+    });
+  }
+
   private async callOpenAI(model: ExternalModel, messages: any[], options?: any): Promise<string> {
     const baseURL = model.endpoint || 'https://api.openai.com/v1';
-    
+    const openAIMessages = messages.map(m => {
+      const parts: any[] = [];
+      if (typeof m.content === 'string' && m.content.trim()) parts.push({ type: 'text', text: m.content });
+      if (Array.isArray(m._imageParts) && m._imageParts.length) {
+        for (const img of m._imageParts) {
+          parts.push({ type: 'image_url', image_url: { url: `data:${img.mime};base64,${img.base64}` } });
+        }
+      }
+      // If only one text part, send as legacy string for compatibility.
+      if (parts.length === 1 && parts[0].type === 'text') return { role: m.role, content: parts[0].text };
+      return { role: m.role, content: parts };
+    });
     const response = await fetch(`${baseURL}/chat/completions`, {
       method: 'POST',
       headers: {
@@ -475,7 +549,7 @@ export class ExternalModelManager {
       },
       body: JSON.stringify({
         model: model.model,
-        messages,
+        messages: openAIMessages,
         temperature: options?.temperature ?? model.temperature ?? 0.7,
         max_tokens: options?.maxTokens ?? model.maxTokens ?? 4096
       })
@@ -490,7 +564,35 @@ export class ExternalModelManager {
     return data.choices[0]?.message?.content || '';
   }
 
-  private async callAnthropic(model: ExternalModel, messages: any[], options?: any): Promise<string> {
+  private async callAnthropic(model: ExternalModel, messages: any[], options?: any): Promise<any> {
+    // Transform messages to Anthropic schema: content array can include text & images
+    const anthMessages = messages.map(m => {
+      const parts: any[] = [];
+      if (typeof m.content === 'string' && m.content.trim()) parts.push({ type: 'text', text: m.content });
+      if (Array.isArray(m._imageParts)) {
+        for (const img of m._imageParts) {
+          parts.push({ type: 'image', source: { type: 'base64', media_type: img.mime, data: img.base64 } });
+        }
+      }
+      return { role: m.role === 'system' ? 'user' : m.role, content: parts.length ? parts : [{ type: 'text', text: '' }] };
+    });
+    // Merge system prompt into first user message
+    const systemIdx = messages.findIndex(m => m.role === 'system');
+    if (systemIdx >= 0) {
+      const sys = messages[systemIdx].content;
+      const firstUser = anthMessages.find(m => m.role === 'user');
+      if (firstUser) {
+        firstUser.content.unshift({ type: 'text', text: `(system) ${sys}` });
+      } else {
+        anthMessages.unshift({ role: 'user', content: [{ type: 'text', text: `(system) ${sys}` }] });
+      }
+    }
+    const body = {
+      model: model.model,
+      messages: anthMessages,
+      max_tokens: options?.maxTokens ?? model.maxTokens ?? 4096,
+      temperature: options?.temperature ?? model.temperature ?? 0.7
+    };
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -498,21 +600,33 @@ export class ExternalModelManager {
         'Content-Type': 'application/json',
         'anthropic-version': '2023-06-01'
       },
-      body: JSON.stringify({
-        model: model.model,
-        messages,
-        max_tokens: options?.maxTokens ?? model.maxTokens ?? 4096,
-        temperature: options?.temperature ?? model.temperature ?? 0.7
-      })
+      body: JSON.stringify(body)
     });
-
     if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Anthropic API error: ${response.status} - ${error}`);
+      const errorText = await response.text();
+      let parsed: any;
+      try { parsed = JSON.parse(errorText); } catch { /* ignore */ }
+      const msg = parsed?.error?.message || errorText;
+      throw new Error(`Anthropic API error ${response.status}: ${msg.substring(0,400)}`);
     }
-
     const data = await response.json();
-    return data.content[0]?.text || '';
+    // Extract tool (function) calls if present (future-proof: Anthropic function calling beta)
+    let toolCalls: any[] | undefined;
+    if (Array.isArray(data.content)) {
+      // Hypothetical structure: {type:'tool_use', name, input}
+      toolCalls = data.content.filter((c: any) => c.type === 'tool_use').map((c: any, idx: number) => ({
+        id: c.id || `anthropic_tool_${idx}`,
+        type: 'function',
+        function: { name: c.name, arguments: c.input || {} }
+      }));
+    }
+    const text = Array.isArray(data.content)
+      ? data.content.filter((c: any) => c.type === 'text').map((c: any) => c.text).join('\n')
+      : (typeof data === 'string' ? data : '');
+    if (toolCalls && toolCalls.length) {
+      return { content: text, needsToolExecution: true, toolCalls };
+    }
+    return { content: text };
   }
 
   private async callGitHubCopilot(model: ExternalModel, messages: any[], options?: any): Promise<string> {
@@ -584,11 +698,18 @@ export class ExternalModelManager {
   }
 
   private async callGoogle(model: ExternalModel, messages: any[], options?: any): Promise<string> {
-    // Convert messages to Google's format
-    const contents = messages.map(msg => ({
-      role: msg.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: msg.content }]
-    }));
+    // Convert messages to Google's (Gemini) format with optional inline images
+    const contents = messages.map(msg => {
+      const parts: any[] = [];
+      if (typeof msg.content === 'string' && msg.content.trim()) parts.push({ text: msg.content });
+      if (Array.isArray(msg._imageParts)) {
+        for (const img of msg._imageParts) {
+          parts.push({ inlineData: { mimeType: img.mime, data: img.base64 } });
+        }
+      }
+      if (!parts.length) parts.push({ text: '' });
+      return { role: msg.role === 'assistant' ? 'model' : 'user', parts };
+    });
 
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${model.model}:generateContent?key=${model.apiKey}`,

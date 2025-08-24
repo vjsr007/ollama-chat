@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import McpDirectoryPopup from './components/McpDirectoryPopup';
 import { ChatMessage } from '../shared/domain/chat';
 import { McpTools } from './components/McpTools';
 import MessageContent from './components/MessageContent';
@@ -23,6 +24,7 @@ const App: React.FC = () => {
   const [isModelManagerOpen, setIsModelManagerOpen] = useState(false);
   const [toolsStatus, setToolsStatus] = useState<{ enabled: number; total: number; limit: number } | null>(null);
   const [isLogViewerOpen, setIsLogViewerOpen] = useState(false);
+  const [isMcpDirectoryOpen, setIsMcpDirectoryOpen] = useState(false);
   
   // States for history and autocompletion
   const [promptHistory, setPromptHistory] = useState<string[]>([]);
@@ -494,6 +496,13 @@ const App: React.FC = () => {
           >
             📜 Logs
           </button>
+          <button
+            className="tab-btn"
+            onClick={() => setIsMcpDirectoryOpen(true)}
+            title="Buscar e instalar MCP servers"
+          >
+            🔍 MCP
+          </button>
         </div>
         <div className="actions">
           <button onClick={() => setMessages([])} disabled={!messages.length || isLoading}>Clear</button>
@@ -664,6 +673,36 @@ const App: React.FC = () => {
         }}
       />
   <LogViewer isOpen={isLogViewerOpen} onClose={() => setIsLogViewerOpen(false)} />
+  <McpDirectoryPopup
+    isOpen={isMcpDirectoryOpen}
+    onClose={() => setIsMcpDirectoryOpen(false)}
+    onInstall={async (pkg: string) => {
+      await (window as any).mcp.installPackages([pkg]);
+    }}
+    quickAddServer={async (entry: any, opts?: { start?: boolean }) => {
+      // Determine command/args (directory may override for local integrations)
+      const command = entry.command || 'npx';
+      const args = entry.args ? entry.args : [entry.package];
+      // Prevent duplicate server by id (slugified package/entry id)
+      const servers = await (window as any).mcp.getServers();
+      const desiredId = (entry.id || entry.package || entry.name).replace(/[^a-zA-Z0-9_-]/g,'-');
+      const existing = servers.find((s: any) => s.id === desiredId || s.name === entry.name);
+      if (!existing) {
+        await (window as any).mcp.addServer({
+          id: desiredId,
+            name: entry.name,
+            type: 'stdio',
+            command,
+            args,
+            enabled: true
+        });
+      }
+      if (opts?.start) {
+        try { await (window as any).mcp.startServer(desiredId); } catch (e) { console.error('Failed to start server', desiredId, e); }
+      }
+      setTimeout(() => { loadAvailableTools(); }, 600);
+    }}
+  />
     </div>
   );
 };

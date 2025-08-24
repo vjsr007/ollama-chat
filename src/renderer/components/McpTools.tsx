@@ -82,8 +82,13 @@ export const McpTools: React.FC<McpToolsProps> = ({ onToolCall }) => {
   const [reloading, setReloading] = useState(false);
   const [missingReport, setMissingReport] = useState<string[]>([]);
   const [packageScan, setPackageScan] = useState<{running: boolean; results: any[]}>({running: false, results: []});
+  const [installing, setInstalling] = useState<boolean>(false);
   const [configuringServer, setConfiguringServer] = useState<McpServer | null>(null);
   const [serverConfigState, setServerConfigState] = useState<{endpoint?: string; secrets: Record<string,string>; newSecretValues: Record<string,string>}>({endpoint: '', secrets: {}, newSecretValues: {}});
+  const [serverMetadata, setServerMetadata] = useState<any | null>(null);
+  const [metadataLoading, setMetadataLoading] = useState<string | null>(null);
+  const [depCheckingServer, setDepCheckingServer] = useState<string | null>(null);
+  const [depInstallingServer, setDepInstallingServer] = useState<string | null>(null);
 
   useEffect(() => {
     loadTools();
@@ -179,6 +184,22 @@ export const McpTools: React.FC<McpToolsProps> = ({ onToolCall }) => {
     } catch (e) {
       console.error('Package check failed', e);
       setPackageScan({ running: false, results: [] });
+    }
+  };
+
+  const installMissing = async () => {
+    if (!packageScan.results.length) return;
+    const missing = packageScan.results.filter(r => r.status === 'missing').map(r => r.package || r.id);
+    if (!missing.length) return;
+    setInstalling(true);
+    try {
+      const resp = await (window.mcp as any).installPackages(missing);
+      console.log('Install resp', resp);
+      await checkPackages();
+    } catch (e) {
+      console.error('Install failed', e);
+    } finally {
+      setInstalling(false);
     }
   };
 
@@ -328,6 +349,38 @@ export const McpTools: React.FC<McpToolsProps> = ({ onToolCall }) => {
     }
   };
 
+  const fetchServerMetadata = async (id: string) => {
+    setMetadataLoading(id);
+    try {
+      const resp = await (window.mcp as any).getServerMetadata(id);
+      if (resp.success) setServerMetadata(resp.metadata); else setServerMetadata({ error: resp.error });
+    } catch (e) { setServerMetadata({ error: e instanceof Error ? e.message : String(e) }); }
+    finally { setMetadataLoading(null); }
+  };
+
+  const checkServerDeps = async (id: string) => {
+    setDepCheckingServer(id);
+    try {
+      const resp = await (window.mcp as any).checkServerDeps(id);
+      if (resp.success && serverMetadata && serverMetadata.id === id) {
+        setServerMetadata({ ...serverMetadata, depCheck: resp.results });
+      }
+    } catch (e) { console.error(e); }
+    finally { setDepCheckingServer(null); }
+  };
+
+  const installServerDeps = async (id: string) => {
+    setDepInstallingServer(id);
+    try {
+      const resp = await (window.mcp as any).installServerDeps(id);
+      if (resp.success) {
+        // Re-check deps after install
+        await checkServerDeps(id);
+      }
+    } catch (e) { console.error(e); }
+    finally { setDepInstallingServer(null); }
+  };
+
   const openConfigure = async (server: McpServer) => {
     try {
       const resp = await (window.mcp as unknown as ExtendedMcpApi).getServerConfig(server.id);
@@ -398,6 +451,9 @@ export const McpTools: React.FC<McpToolsProps> = ({ onToolCall }) => {
           </button>
           <button onClick={detectMissing} title="Detect missing / placeholder servers">🩺 Check Missing</button>
           <button onClick={checkPackages} disabled={packageScan.running} title="npm view each package">{packageScan.running ? '🔍 Scanning...' : '📦 Verify Packages'}</button>
+          <button onClick={installMissing} disabled={installing || packageScan.running || !packageScan.results.some(r => r.status === 'missing')} title="Install all missing npm packages">
+            {installing ? '⏳ Installing...' : '⬇️ Install Missing'}
+          </button>
           {configPath && (
             <span className="config-path-label" title={configPath}>{configPath}</span>
           )}
@@ -409,7 +465,25 @@ export const McpTools: React.FC<McpToolsProps> = ({ onToolCall }) => {
         )}
         {packageScan.results.length > 0 && (
           <div className="missing-report">
-            <strong>Package Status:</strong> {packageScan.results.map(r => `${r.package || r.id}:${r.status}${r.version ? '@'+r.version:''}`).join(' | ')}
+            <strong>Package Status:</strong>
+            <ul className="package-status-list">
+              {packageScan.results.map(r => (
+                <li key={r.package || r.id} className="package-status-item">
+                  <span>{r.package || r.id}</span>
+                  <span>{r.status === 'installed' ? '✅ installed' : '❌ missing'}</span>
+                  {r.version && <span>@{r.version}</span>}
+                  {r.status === 'missing' && !installing && (
+                    <button className="btn-inline-install" onClick={async () => {
+                      setInstalling(true);
+                      try {
+                        await (window.mcp as any).installPackages([r.package || r.id]);
+                        await checkPackages();
+                      } catch (e) { console.error(e); } finally { setInstalling(false); }
+                    }}>Install</button>
+                  )}
+                </li>
+              ))}
+            </ul>
           </div>
         )}
         
@@ -564,6 +638,14 @@ export const McpTools: React.FC<McpToolsProps> = ({ onToolCall }) => {
                   {server.status === 'ready' ? 'Stop' : 'Start'}
                 </button>
                 <button
+                  onClick={() => fetchServerMetadata(server.id)}
+                  className="btn-configure"
+                  title="Metadata"
+                  disabled={metadataLoading === server.id}
+                >
+                  {metadataLoading === server.id ? '…' : 'Info'}
+                </button>
+                <button
                   onClick={() => openConfigure(server)}
                   className="btn-configure"
                   title="Configure tokens / endpoint"
@@ -703,6 +785,55 @@ export const McpTools: React.FC<McpToolsProps> = ({ onToolCall }) => {
             <div className="modal-footer">
               <button onClick={() => setConfiguringServer(null)} className="btn-cancel">Cancel</button>
               <button onClick={saveServerConfig} className="btn-add">Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {serverMetadata && (
+        <div className="modal-overlay">
+          <div className="modal">
+            <div className="modal-header">
+              <h3>Server Metadata: {serverMetadata.name || serverMetadata.id}</h3>
+              <button onClick={() => setServerMetadata(null)} className="modal-close">✕</button>
+            </div>
+            <div className="modal-body metadata-body">
+              {serverMetadata.error && <div className="error">Error: {serverMetadata.error}</div>}
+              {!serverMetadata.error && (
+                <>
+                  <div className="meta-row"><strong>ID:</strong> {serverMetadata.id}</div>
+                  <div className="meta-row"><strong>Status:</strong> {serverMetadata.status}</div>
+                  <div className="meta-row"><strong>Type:</strong> {serverMetadata.type}</div>
+                  {serverMetadata.command && <div className="meta-row"><strong>Command:</strong> {serverMetadata.command} {serverMetadata.args?.join(' ')}</div>}
+                  {serverMetadata.package && <div className="meta-row"><strong>Package:</strong> {serverMetadata.package} {serverMetadata.packageVersion ? `@${serverMetadata.packageVersion}` : serverMetadata.packageInstalled ? '(installed)' : '(not installed)'}</div>}
+                  <div className="meta-row"><strong>Tools:</strong> {serverMetadata.toolCount} {serverMetadata.tools?.slice(0,15).join(', ')}{serverMetadata.tools?.length > 15 ? '…' : ''}</div>
+                  {serverMetadata.envKeys && <div className="meta-row"><strong>Env Keys:</strong> {serverMetadata.envKeys.join(', ') || '—'}</div>}
+                  {serverMetadata.secretEnvKeys && <div className="meta-row"><strong>Secret Keys:</strong> {serverMetadata.secretEnvKeys.join(', ') || '—'}</div>}
+                  <div className="meta-row"><strong>PID:</strong> {serverMetadata.pid || '—'}</div>
+                  <hr />
+                  <div className="dep-actions">
+                    <button disabled={depCheckingServer === serverMetadata.id} onClick={() => checkServerDeps(serverMetadata.id)}>
+                      {depCheckingServer === serverMetadata.id ? 'Checking…' : 'Check Dependencies'}
+                    </button>
+                    <button disabled={depInstallingServer === serverMetadata.id} onClick={() => installServerDeps(serverMetadata.id)}>
+                      {depInstallingServer === serverMetadata.id ? 'Installing…' : 'Install Dependencies'}
+                    </button>
+                  </div>
+                  {serverMetadata.depCheck && (
+                    <div className="dep-results">
+                      {serverMetadata.depCheck.map((r:any) => (
+                        <div key={r.package || r.id} className={`dep-item status-${r.status}`}>
+                          {r.package || 'no-package'} → {r.status}{r.version ? ` @${r.version}`: ''}
+                          {r.error && <span className="dep-error"> {r.error}</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button onClick={() => setServerMetadata(null)} className="btn-cancel">Close</button>
             </div>
           </div>
         </div>

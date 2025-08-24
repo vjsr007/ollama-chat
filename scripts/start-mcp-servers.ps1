@@ -19,10 +19,10 @@ $githubProcess = Start-Process -FilePath "cmd" -ArgumentList "/c", "npx @modelco
 $serverProcesses += $githubProcess
 Write-Host "GitHub MCP Server started (PID: $($githubProcess.Id))" -ForegroundColor Green
 
-Write-Host "Starting Puppeteer MCP Server..." -ForegroundColor Yellow
-$puppeteerProcess = Start-Process -FilePath "cmd" -ArgumentList "/c", "npx @modelcontextprotocol/server-puppeteer" -NoNewWindow -PassThru
+Write-Host "Starting Puppeteer MCP Server (local)..." -ForegroundColor Yellow
+$puppeteerProcess = Start-Process -FilePath "node" -ArgumentList "integration-servers/puppeteer-server.js" -NoNewWindow -PassThru
 $serverProcesses += $puppeteerProcess
-Write-Host "Puppeteer MCP Server started (PID: $($puppeteerProcess.Id))" -ForegroundColor Green
+Write-Host "Puppeteer MCP Server (local) started (PID: $($puppeteerProcess.Id))" -ForegroundColor Green
 
 Write-Host "Starting Memory MCP Server..." -ForegroundColor Yellow
 $memoryProcess = Start-Process -FilePath "cmd" -ArgumentList "/c", "npx @modelcontextprotocol/server-memory" -NoNewWindow -PassThru

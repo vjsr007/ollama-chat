@@ -479,6 +479,32 @@ textarea::placeholder { color:#667386; }
   max-height: 80vh;
   overflow-y: auto;
 }
+.modal.large { max-width: 900px; }
+
+/* MCP Directory */
+.directory-body { padding-top: 10px; }
+.directory-search-row { display:flex; gap:12px; align-items:center; margin-bottom:14px; }
+.directory-search-row input { flex:1; padding:10px 14px; border-radius:8px; border:1px solid rgba(255,255,255,0.25); background:rgba(0,0,0,0.25); color:#fff; }
+.directory-results { display:flex; flex-direction:column; gap:14px; }
+.directory-entry { display:flex; gap:16px; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.12); border-radius:14px; padding:14px 16px; }
+.dir-main { flex:1; min-width:0; }
+.dir-title-row { display:flex; align-items:center; gap:10px; margin-bottom:4px; }
+.dir-name { font-weight:600; font-size:15px; }
+.dir-badge { font-size:11px; padding:4px 8px; border-radius:999px; background:#33455a; color:#cbd5e1; }
+.dir-badge.installed { background:#25643f; color:#c6f6d5; }
+.dir-badge.missing { background:#633636; color:#fecaca; }
+.dir-desc { font-size:13px; line-height:1.35; opacity:.85; margin-bottom:6px; }
+.dir-meta-row { display:flex; flex-wrap:wrap; gap:10px; font-size:11px; opacity:.8; margin-bottom:6px; }
+.dir-package { font-family:Consolas,monospace; background:rgba(0,0,0,0.25); padding:2px 6px; border-radius:6px; }
+.dir-reliability { letter-spacing:1px; }
+.dir-tags .tag { background:rgba(0,0,0,0.3); padding:2px 6px; border-radius:5px; margin-right:4px; }
+.dir-links { display:flex; gap:12px; font-size:12px; margin-bottom:6px; }
+.dir-links a { color:#90cdf4; text-decoration:none; }
+.dir-links a:hover { text-decoration:underline; }
+.dir-notes { font-size:12px; background:rgba(255,255,255,0.08); padding:6px 8px; border-left:3px solid #f6ad55; border-radius:6px; }
+.dir-actions { display:flex; flex-direction:column; gap:8px; justify-content:center; }
+.dir-actions button { white-space:nowrap; }
+.no-results { text-align:center; opacity:.7; font-style:italic; }
 
 .modal-header {
   display: flex;
@@ -1139,3 +1165,19 @@ textarea::placeholder { color:#667386; }
     margin: 0 auto;
   }
 }
+
+/* MCP Directory enhanced layout */
+.dir-inline-filter { display:flex; align-items:center; gap:4px; font-size:12px; }
+.dir-history-row { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; }
+.dir-history-btn { font-size:11px; padding:4px 8px; background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.15); border-radius:6px; cursor:pointer; }
+.dir-history-btn:hover { background:rgba(255,255,255,0.15); }
+.dir-flex-row { display:flex; gap:16px; }
+.directory-results.with-readme { flex:0.5; }
+.dir-readme-pane { flex:0.5; min-width:0; display:flex; flex-direction:column; gap:10px; }
+.dir-readme-header { display:flex; justify-content:space-between; align-items:center; }
+.dir-readme-header h4 { margin:4px 0; font-size:14px; }
+.dir-readme-close { font-size:12px; padding:4px 8px; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); border-radius:4px; cursor:pointer; }
+.dir-readme-close:hover { background:rgba(255,255,255,0.2); }
+.dir-readme-content { flex:1; overflow-y:auto; background:rgba(0,0,0,0.25); padding:12px; border-radius:8px; font-size:12px; line-height:1.45; white-space:pre-wrap; font-family:Consolas,monospace; }
+.dir-readme-btn { font-size:11px; padding:3px 8px; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.15); border-radius:6px; cursor:pointer; }
+.dir-readme-btn:hover { background:rgba(255,255,255,0.18); }

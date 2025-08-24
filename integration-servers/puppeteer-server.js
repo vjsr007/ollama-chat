@@ -1,43 +1,47 @@
 #!/usr/bin/env node
-// Playwright MCP server (basic). Requires playwright installed (npm i playwright) and browsers installed.
+// Puppeteer MCP integration server (local) providing basic web automation & scraping tools.
+// Uses a fresh browser per tool invocation for isolation. For higher performance you could implement session reuse.
 const { JsonRpcServer } = require('./base-jsonrpc-server.js');
 const fs = require('fs');
 const path = require('path');
-let playwright; let pwAvailable = true;
-try { playwright = require('playwright'); } catch { pwAvailable = false; }
+let puppeteer; let ppAvailable = true;
+try { puppeteer = require('puppeteer'); } catch { ppAvailable = false; }
 
-async function withBrowser(fn, { browserType = 'chromium', headless = true } = {}) {
-  if (!pwAvailable) throw new Error('Playwright not installed. Run: npm install playwright');
-  const type = playwright[browserType] || playwright.chromium;
-  const browser = await type.launch({ headless });
+async function withBrowser(fn, { headless = true } = {}) {
+  if (!ppAvailable) throw new Error('Puppeteer not installed. Run: npm install puppeteer');
+  const browser = await puppeteer.launch({ headless });
   try { return await fn(browser); } finally { await browser.close(); }
+}
+
+function safeScriptWrap(script) {
+  if (/return\s+/i.test(script)) return `(() => { try { ${script} } catch(e){ return { __pp_error: e.message }; } })()`;
+  return `(() => { try { return (${script}); } catch(e){ return { __pp_error: e.message }; } })()`;
 }
 
 const tools = () => [
   {
-    name: 'pw_navigate_get_title',
-    description: 'Open a page (Chromium) at URL and return its title',
+    name: 'puppeteer_navigate_get_title',
+    description: 'Open a page at URL and return its title',
     inputSchema: { type: 'object', properties: { url: { type: 'string', description: 'Page URL' } }, required: ['url'] },
     invoke: async ({ url }) => withBrowser(async browser => {
       const page = await browser.newPage();
-      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
       return { url, title: await page.title() };
     })
   },
   {
-    name: 'pw_screenshot',
+    name: 'puppeteer_screenshot',
     description: 'Navigate to a URL and capture a screenshot (PNG base64, optionally write file)',
     inputSchema: { type: 'object', properties: {
-      url: { type: 'string', description: 'Page URL' },
-      fullPage: { type: 'boolean', description: 'Capture full page', default: false },
+      url: { type: 'string' },
+      fullPage: { type: 'boolean', default: false },
       selector: { type: 'string', description: 'If provided, screenshot only this selector' },
       waitSelector: { type: 'string', description: 'Wait for this selector before capture' },
       outputPath: { type: 'string', description: 'Optional absolute or relative path to save PNG' },
-      ensureDir: { type: 'boolean', description: 'Create parent directory if needed', default: true },
-      browser: { type: 'string', enum: ['chromium','firefox','webkit'], default: 'chromium' }
+      ensureDir: { type: 'boolean', default: true }
     }, required: ['url'] },
-    invoke: async ({ url, fullPage=false, selector, waitSelector, outputPath, ensureDir=true, browser='chromium' }) => withBrowser(async browserInstance => {
-      const page = await browserInstance.newPage();
+    invoke: async ({ url, fullPage=false, selector, waitSelector, outputPath, ensureDir=true }) => withBrowser(async browser => {
+      const page = await browser.newPage();
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
       if (waitSelector) await page.waitForSelector(waitSelector, { timeout: 20000 });
       let buffer;
@@ -61,95 +65,90 @@ const tools = () => [
         }
       }
       return { url, fullPage, selector: selector||null, saved_path: savedPath, screenshot_base64: buffer.toString('base64') };
-    }, { browserType: browser })
+    })
   },
   {
-    name: 'pw_get_html',
+    name: 'puppeteer_get_html',
     description: 'Return page HTML (optionally after waiting for a selector)',
     inputSchema: { type: 'object', properties: {
       url: { type: 'string' },
-      waitSelector: { type: 'string' },
-      browser: { type: 'string', enum: ['chromium','firefox','webkit'], default: 'chromium' }
+      waitSelector: { type: 'string' }
     }, required: ['url'] },
-    invoke: async ({ url, waitSelector, browser='chromium' }) => withBrowser(async browserInstance => {
-      const page = await browserInstance.newPage();
+    invoke: async ({ url, waitSelector }) => withBrowser(async browser => {
+      const page = await browser.newPage();
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
       if (waitSelector) await page.waitForSelector(waitSelector, { timeout: 20000 });
       const content = await page.content();
       return { url, html: content };
-    }, { browserType: browser })
+    })
   },
   {
-    name: 'pw_get_text',
+    name: 'puppeteer_get_text',
     description: 'Extract innerText from selector(s) on a page',
     inputSchema: { type: 'object', properties: {
       url: { type: 'string' },
-      selector: { type: 'string', description: 'CSS selector (returns first match). Use selectorAll for multiple.' },
-      selectorAll: { type: 'string', description: 'CSS selector to return all matches text content array.' },
-      browser: { type: 'string', enum: ['chromium','firefox','webkit'], default: 'chromium' }
+      selector: { type: 'string' },
+      selectorAll: { type: 'string' }
     }, required: ['url'] },
-    invoke: async ({ url, selector, selectorAll, browser='chromium' }) => withBrowser(async browserInstance => {
-      const page = await browserInstance.newPage();
+    invoke: async ({ url, selector, selectorAll }) => withBrowser(async browser => {
+      const page = await browser.newPage();
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
       const result = {};
       if (selector) {
         const el = await page.$(selector);
-        result.text = el ? (await el.innerText()) : null;
+        result.text = el ? (await el.evaluate(n => n.innerText)) : null;
       }
       if (selectorAll) {
         const els = await page.$$(selectorAll);
         result.texts = [];
-        for (const el of els) result.texts.push(await el.innerText());
+        for (const el of els) result.texts.push(await el.evaluate(n => n.innerText));
       }
       return { url, selector: selector||null, selectorAll: selectorAll||null, ...result };
-    }, { browserType: browser })
+    })
   },
   {
-    name: 'pw_eval_js',
+    name: 'puppeteer_eval_js',
     description: 'Evaluate JavaScript in the page context and return the JSON-serializable result',
     inputSchema: { type: 'object', properties: {
       url: { type: 'string' },
-      script: { type: 'string', description: 'JavaScript function body or expression returning data' },
-      browser: { type: 'string', enum: ['chromium','firefox','webkit'], default: 'chromium' }
+      script: { type: 'string', description: 'JS expression or function body returning data' }
     }, required: ['url','script'] },
-    invoke: async ({ url, script, browser='chromium' }) => withBrowser(async browserInstance => {
-      const page = await browserInstance.newPage();
+    invoke: async ({ url, script }) => withBrowser(async browser => {
+      const page = await browser.newPage();
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
-      // Wrap script so that both expression or function body are supported
-      const wrapped = `(() => { try { ${script.includes('return') ? script : 'return ('+script+')'} } catch (e) { return { __pw_error: e.message }; } })()`;
+      const wrapped = safeScriptWrap(script);
       const value = await page.evaluate(wrapped);
-      if (value && value.__pw_error) throw new Error('Eval error: '+value.__pw_error);
+      if (value && value.__pp_error) throw new Error('Eval error: '+value.__pp_error);
       return { url, result: value };
-    }, { browserType: browser })
+    })
   },
   {
-    name: 'pw_wait_selector',
+    name: 'puppeteer_wait_selector',
     description: 'Wait for a selector and optionally return its text and HTML',
     inputSchema: { type: 'object', properties: {
       url: { type: 'string' },
       selector: { type: 'string' },
       returnHtml: { type: 'boolean', default: false },
       returnText: { type: 'boolean', default: true },
-      timeoutMs: { type: 'number', default: 30000 },
-      browser: { type: 'string', enum: ['chromium','firefox','webkit'], default: 'chromium' }
+      timeoutMs: { type: 'number', default: 30000 }
     }, required: ['url','selector'] },
-    invoke: async ({ url, selector, returnHtml=false, returnText=true, timeoutMs=30000, browser='chromium' }) => withBrowser(async browserInstance => {
-      const page = await browserInstance.newPage();
+    invoke: async ({ url, selector, returnHtml=false, returnText=true, timeoutMs=30000 }) => withBrowser(async browser => {
+      const page = await browser.newPage();
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
       const el = await page.waitForSelector(selector, { timeout: timeoutMs });
       if (!el) throw new Error('Selector not found after wait');
       const payload = { url, selector };
-      if (returnText) payload.text = await el.innerText();
+      if (returnText) payload.text = await el.evaluate(n => n.innerText);
       if (returnHtml) payload.html = await el.evaluate(n => n.outerHTML);
       return payload;
-    }, { browserType: browser })
+    })
   },
   {
-    name: 'pw_batch',
-    description: 'Run multiple page actions sequentially (navigate once). Supports get_text, screenshot, eval_js actions.',
+    name: 'puppeteer_batch',
+    description: 'Run multiple page actions sequentially (navigate once). Actions: get_text, screenshot, eval_js, wait_selector',
     inputSchema: { type: 'object', properties: {
       url: { type: 'string' },
-      actions: { type: 'array', description: 'Array of actions', items: { type: 'object', properties: {
+      actions: { type: 'array', items: { type: 'object', properties: {
         type: { type: 'string', enum: ['get_text','screenshot','eval_js','wait_selector'] },
         selector: { type: 'string' },
         selectorAll: { type: 'string' },
@@ -158,11 +157,10 @@ const tools = () => [
         waitSelector: { type: 'string' },
         returnHtml: { type: 'boolean' },
         returnText: { type: 'boolean' }
-      }, required: ['type'] } },
-      browser: { type: 'string', enum: ['chromium','firefox','webkit'], default: 'chromium' }
+      }, required: ['type'] } }
     }, required: ['url','actions'] },
-    invoke: async ({ url, actions, browser='chromium' }) => withBrowser(async browserInstance => {
-      const page = await browserInstance.newPage();
+    invoke: async ({ url, actions }) => withBrowser(async browser => {
+      const page = await browser.newPage();
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
       const results = [];
       for (const act of actions) {
@@ -171,12 +169,12 @@ const tools = () => [
             const res = {};
             if (act.selector) {
               const el = await page.$(act.selector);
-              res.text = el ? await el.innerText() : null;
+              res.text = el ? await el.evaluate(n => n.innerText) : null;
             }
             if (act.selectorAll) {
               const els = await page.$$(act.selectorAll);
               res.texts = [];
-              for (const el of els) res.texts.push(await el.innerText());
+              for (const el of els) res.texts.push(await el.evaluate(n => n.innerText));
             }
             results.push({ type: 'get_text', ...res });
             break;
@@ -195,9 +193,9 @@ const tools = () => [
             break;
           }
           case 'eval_js': {
-            const wrapped = `(() => { try { ${act.script.includes('return') ? act.script : 'return ('+act.script+')'} } catch (e) { return { __pw_error: e.message }; } })()`;
+            const wrapped = safeScriptWrap(act.script);
             const val = await page.evaluate(wrapped);
-            if (val && val.__pw_error) throw new Error('Eval error: '+val.__pw_error);
+            if (val && val.__pp_error) throw new Error('Eval error: '+val.__pp_error);
             results.push({ type: 'eval_js', result: val });
             break;
           }
@@ -211,8 +209,8 @@ const tools = () => [
         }
       }
       return { url, results };
-    }, { browserType: browser })
+    })
   }
 ];
 
-new JsonRpcServer({ toolsProvider: tools, onInitialize: () => ({ name: 'playwright-mcp' }) });
+new JsonRpcServer({ toolsProvider: tools, onInitialize: () => ({ name: 'puppeteer-mcp' }) });

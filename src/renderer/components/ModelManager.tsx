@@ -42,6 +42,7 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
     ],
     'anthropic': [
       { model: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet', description: 'Anthropic\'s most powerful model' },
+      { model: 'claude-4-sonnet-20250115', name: 'Claude 4 Sonnet', description: 'Next-gen balanced intelligence (Sonnet 4)' },
       { model: 'claude-3-opus-20240229', name: 'Claude 3 Opus', description: 'Anthropic\'s premium model' },
       { model: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku', description: 'Fast and economical model' }
     ],
@@ -112,7 +113,7 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
       if (response && response.success) {
         await loadExternalModels(); // Reload the list
         window.dispatchEvent(new Event('external-models-updated'));
-        
+
         setNewModel({
           provider: 'openai',
           enabled: true,
@@ -148,7 +149,7 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
     try {
       const model = externalModels.find(m => m.id === id);
       if (!model) return;
-      
+
       const response = await (window as any).externalModels?.toggle(id, !model.enabled);
       if (response && response.success) {
         await loadExternalModels(); // Reload the list
@@ -182,8 +183,8 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
       name: model.name,
       provider: model.provider,
       model: model.model,
-  // If apiKey is the secure sentinel, don't prefill (user leaves blank to keep existing)
-  apiKey: model.apiKey === '__SECURE__' ? '' : model.apiKey,
+      // If apiKey is the secure sentinel, don't prefill (user leaves blank to keep existing)
+      apiKey: model.apiKey === '__SECURE__' ? '' : model.apiKey,
       endpoint: model.endpoint,
       enabled: model.enabled,
       description: model.description,
@@ -219,7 +220,7 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
       if (response && response.success) {
         await loadExternalModels(); // Reload the list
         window.dispatchEvent(new Event('external-models-updated'));
-        
+
         setNewModel({
           provider: 'openai',
           enabled: true,
@@ -254,9 +255,9 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
       case 'anthropic': return '🧠';
       case 'github-copilot': return '🐙';
       case 'google': return '🔍';
-  case 'cohere': return '⚡';
-  case 'mistral': return '🌀';
-  case 'custom': return '🛠️';
+      case 'cohere': return '⚡';
+      case 'mistral': return '🌀';
+      case 'custom': return '🛠️';
       default: return '🌐';
     }
   };
@@ -267,9 +268,9 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
       case 'anthropic': return '#d97706';
       case 'github-copilot': return '#6366f1';
       case 'google': return '#4285f4';
-  case 'cohere': return '#8b5cf6';
-  case 'mistral': return '#0ea5e9';
-  case 'custom': return '#6b7280';
+      case 'cohere': return '#8b5cf6';
+      case 'mistral': return '#0ea5e9';
+      case 'custom': return '#6b7280';
       default: return '#6b7280';
     }
   };
@@ -317,7 +318,7 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
           <div className="models-section">
             <div className="section-header">
               <h3>📋 Configured Models</h3>
-              <button 
+              <button
                 onClick={() => setShowAddModel(true)}
                 className="add-model-btn"
               >
@@ -343,7 +344,7 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
                       <div className="model-header">
                         <span className="model-icon">{getProviderIcon(model.provider)}</span>
                         <span className="model-name">{model.name}</span>
-                        <span 
+                        <span
                           className={`model-provider ${model.provider}`}
                         >
                           {model.provider}
@@ -379,7 +380,7 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
                         </div>
                       )}
                     </div>
-                    
+
                     <div className="model-controls">
                       <button
                         onClick={() => validateModel(model.id)}
@@ -416,10 +417,10 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
 
           {/* Predefined models */}
           <div className="predefined-section">
-              <h3>⭐ Popular Models</h3>
-              <div className="copilot-hint">
-                🐙 GitHub Copilot models use your GitHub token via the GitHub Models API. Token is stored securely (never written to disk).
-              </div>
+            <h3>⭐ Popular Models</h3>
+            <div className="copilot-hint">
+              🐙 GitHub Copilot models use your GitHub token via the GitHub Models API. Token is stored securely (never written to disk).
+            </div>
             <div className="predefined-providers">
               {Object.entries(predefinedModels).map(([provider, models]) => (
                 <div key={provider} className="provider-section">
@@ -453,7 +454,7 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
           {showAddModel && (
             <div className="add-model-form">
               <h3>{editingModel ? '✏️ Edit Model' : '➕ Add New Model'}</h3>
-              
+
               <div className="form-row">
                 <div className="form-group">
                   <label>Provider</label>
@@ -471,7 +472,7 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
                     <option value="custom">Custom (OpenAI-Compatible)</option>
                   </select>
                 </div>
-                
+
                 <div className="form-group">
                   <label>Model name</label>
                   <input
@@ -493,7 +494,7 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
                     placeholder="e.g. gpt-4o"
                   />
                 </div>
-                
+
                 <div className="form-group">
                   <label>API Key (optional)</label>
                   <input
@@ -502,14 +503,14 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
                     onChange={(e) => setNewModel(prev => ({ ...prev, apiKey: e.target.value }))}
                     placeholder="Your API key"
                   />
-                    {editingModel && (
-                      <button
-                        type="button"
-                        className="inline-btn"
-                        onClick={() => setNewModel(prev => ({ ...prev, apiKey: '' }))}
-                        title="Leave blank to keep stored key; enter new value to replace"
-                      >Clear</button>
-                    )}
+                  {editingModel && (
+                    <button
+                      type="button"
+                      className="inline-btn"
+                      onClick={() => setNewModel(prev => ({ ...prev, apiKey: '' }))}
+                      title="Leave blank to keep stored key; enter new value to replace"
+                    >Clear</button>
+                  )}
                 </div>
               </div>
 
@@ -549,7 +550,7 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
                     placeholder="0.7"
                   />
                 </div>
-                
+
                 <div className="form-group">
                   <label>Max Tokens</label>
                   <input
@@ -565,8 +566,8 @@ const ModelManager: React.FC<ModelManagerProps> = ({ isOpen, onClose }) => {
               </div>
 
               <div className="form-actions">
-                <button 
-                  onClick={editingModel ? saveEditedModel : addModel} 
+                <button
+                  onClick={editingModel ? saveEditedModel : addModel}
                   className="save-btn"
                 >
                   {editingModel ? '💾 Update Model' : '💾 Save Model'}

@@ -56,11 +56,11 @@
     },
     "puppeteer": {
       "type": "stdio",
-      "command": "npx",
+      "command": "node",
       "args": [
-        "@modelcontextprotocol/server-puppeteer"
+        "integration-servers/puppeteer-server.js"
       ],
-  "description": "Web automation with Puppeteer",
+  "description": "Web automation using Puppeteer (headless Chromium)",
       "category": "automation",
       "enabled": false
     },

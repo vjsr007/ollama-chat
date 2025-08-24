@@ -15,6 +15,7 @@ export interface OllamaResponse {
 
 export class OllamaClient {
   private baseUrl: string;
+  private toolSupportCache: Map<string, boolean> = new Map();
   constructor(baseUrl: string = process.env.OLLAMA_BASE_URL || 'http://localhost:11434') {
     this.baseUrl = baseUrl.replace(/\/$/, '');
     console.log(`🌐 Ollama client initialized with base URL: ${this.baseUrl}`);
@@ -321,6 +322,68 @@ export class OllamaClient {
           return await this.generate(strongerReq, tools); // recursive single retry
         }
       }
+
+      // Optional synthetic fallback: if model still refuses tool calls but heuristics say it should; gated by env var
+      if (
+        process.env.OLLAMA_FORCE_TOOL_FALLBACK?.toLowerCase() === 'true' &&
+        !data.message?.tool_calls && supportsTools && userWantsExternalAction && selectedTools.length > 0 &&
+        !(req as any).__syntheticToolFallbackUsed
+      ) {
+        console.log('🧪 Applying synthetic tool fallback (OLLAMA_FORCE_TOOL_FALLBACK enabled).');
+        const lower = lastUserText;
+        // Simple intent heuristics
+        const wantsListDir = /(listar|list)\s+.*(carpetas|carpeta|folders?|directory|directorio|dir)/.test(lower);
+        const wantsReadFile = /(leer|read)\s+.*(archivo|file)/.test(lower);
+        let chosen: McpTool | undefined;
+        if (wantsListDir) {
+          chosen = selectedTools.find(t => /list.*dir|directory_list|system_list_directory/i.test(t.name)) || selectedTools.find(t => /list/i.test(t.name));
+        }
+        if (!chosen && wantsReadFile) {
+          chosen = selectedTools.find(t => /read.*file|system_read_file/i.test(t.name)) || selectedTools.find(t => /read/i.test(t.name));
+        }
+        if (!chosen) {
+          // Fall back to highest scored tool if we have scores
+          if (scoredList && scoredList.length) {
+            const sorted = [...scoredList].sort((a, b) => b.score - a.score);
+            chosen = sorted[0]?.tool;
+          } else {
+            chosen = selectedTools[0];
+          }
+        }
+        if (chosen) {
+          console.log(`🧪 Synthetic tool call created for: ${chosen.name}`);
+          (req as any).__syntheticToolFallbackUsed = true;
+          // Build minimal arguments object based on schema defaults
+            // We attempt to populate with harmless placeholders
+          const argSchema: any = chosen.schema || {};
+          const args: Record<string, any> = {};
+          Object.keys(argSchema).forEach(k => {
+            if (argSchema[k]?.type === 'string') args[k] = argSchema[k].default || '';
+            else if (argSchema[k]?.type === 'number') args[k] = argSchema[k].default || 0;
+            else if (argSchema[k]?.type === 'boolean') args[k] = argSchema[k].default ?? false;
+          });
+          // Specific overrides for common tools
+          if (/list.*dir|directory_list|system_list_directory/i.test(chosen.name) && args['path'] !== undefined) {
+            args['path'] = args['path'] || '.';
+          }
+          return {
+            needsToolExecution: true,
+            toolCalls: [
+              {
+                id: 'synthetic_fallback_' + chosen.name,
+                type: 'function',
+                function: {
+                  name: chosen.name,
+                  arguments: args
+                }
+              }
+            ],
+            content: ''
+          };
+        } else {
+          console.log('🧪 Synthetic fallback enabled but no suitable tool found.');
+        }
+      }
       return { needsToolExecution: false, content };
     } catch (error) {
       console.error('❌ Error calling Ollama API:', error);
@@ -343,23 +406,46 @@ export class OllamaClient {
   }
 
   private async modelSupportsTools(modelName: string): Promise<boolean> {
-    // Known models that support tools - being more conservative
-    const toolSupportedModels = [
-      'llama3.1',
-      'qwen2.5',
-      'mistral-nemo',
-      'mistral-large'
-    ];
+    // 1. Environment override to force disable
+    if (process.env.OLLAMA_FORCE_DISABLE_TOOLS?.toLowerCase() === 'true') {
+      console.log(`🔍 Tool support forced OFF via OLLAMA_FORCE_DISABLE_TOOLS for ${modelName}`);
+      return false;
+    }
 
-    const supportsTools = toolSupportedModels.some(supportedModel =>
-      modelName.toLowerCase().includes(supportedModel.toLowerCase())
-    );
+    // 2. Cached result
+    if (this.toolSupportCache.has(modelName)) {
+      return this.toolSupportCache.get(modelName)!;
+    }
 
-    console.log(`🔍 Checking tool support for ${modelName}: ${supportsTools}`);
+    const lower = modelName.toLowerCase();
 
-    // For now, let's be more conservative about tool support
-    // llama3.2 might have issues with 60 tools at once
-    return supportsTools;
+    // 3. Strict list mode (legacy behavior) if env var set
+    if (process.env.OLLAMA_STRICT_MODEL_LIST?.toLowerCase() === 'true') {
+      const strictList = ['llama3.1', 'qwen2.5', 'mistral-nemo', 'mistral-large'];
+      const matches = strictList.some(s => lower.includes(s));
+      this.toolSupportCache.set(modelName, matches);
+      console.log(`🔍 Strict list tool support for ${modelName}: ${matches}`);
+      return matches;
+    }
+
+    // 4. Dynamic detection via /api/show (best-effort). If it fails, we are optimistic.
+    try {
+      console.log(`🔍 Fetching /api/show for dynamic tool capability detection: ${modelName}`);
+      const { data } = await axios.post(`${this.baseUrl}/api/show`, { name: modelName }, { timeout: 10000 });
+      // Heuristics: look for substrings in modelfile / parameters that hint tool or function calling
+      const haystack = JSON.stringify(data || {}).toLowerCase();
+      const indicative = ['tool_call', 'tool-call', 'function_call', 'function-call', 'tool_usage', 'mcp', 'tools'].some(k => haystack.includes(k));
+      // Some models may not expose explicit markers; we stay optimistic unless we find evidence it's a pure embedding model
+      const obviousNo = /embedding/.test(haystack) && !indicative;
+      const supports = indicative ? true : !obviousNo; // optimistic
+      this.toolSupportCache.set(modelName, supports);
+      console.log(`🔍 Dynamic detection result for ${modelName}: indicative=${indicative} obviousNo=${obviousNo} => supports=${supports}`);
+      return supports;
+    } catch (err) {
+      console.warn(`⚠️ /api/show failed for ${modelName}; assuming tools supported (optimistic). Error:`, (err as any)?.message || err);
+      this.toolSupportCache.set(modelName, true);
+      return true;
+    }
   }
 
   private getMaxToolsForModel(modelName: string): number {

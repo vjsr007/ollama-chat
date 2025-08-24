@@ -25,8 +25,16 @@ export const mcpApi = {
   getConfigPath: () => ipcRenderer.invoke('mcp:get-config-path'),
   updateServerConfig: (id: string, updates: any) => ipcRenderer.invoke('mcp:update-server-config', id, updates),
   setServerSecret: (id: string, key: string, value: string) => ipcRenderer.invoke('mcp:set-server-secret', id, key, value),
-  getServerConfig: (id: string) => ipcRenderer.invoke('mcp:get-server-config', id)
-  ,checkPackages: () => ipcRenderer.invoke('mcp:check-packages')
+  getServerConfig: (id: string) => ipcRenderer.invoke('mcp:get-server-config', id),
+  checkPackages: () => ipcRenderer.invoke('mcp:check-packages'),
+  installPackages: (packages?: string[]) => ipcRenderer.invoke('mcp:install-packages', packages),
+  getServerMetadata: (id: string) => ipcRenderer.invoke('mcp:get-server-metadata', id),
+  checkServerDeps: (id: string) => ipcRenderer.invoke('mcp:check-server-deps', id),
+  installServerDeps: (id: string) => ipcRenderer.invoke('mcp:install-server-deps', id),
+  directorySearch: (term: string) => ipcRenderer.invoke('mcp:directory-search', term),
+  directorySearchOnline: (term: string) => ipcRenderer.invoke('mcp:directory-search-online', term),
+  directoryGet: (id: string) => ipcRenderer.invoke('mcp:directory-get', id),
+  directoryReadme: (pkg: string) => ipcRenderer.invoke('mcp:directory-readme', pkg)
 };
 
 export const electronApi = {

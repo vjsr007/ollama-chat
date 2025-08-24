@@ -11,6 +11,8 @@ export interface OllamaResponse {
   needsToolExecution: boolean;
   content: string;
   toolCalls?: any[];
+  simulationDetected?: boolean;
+  simulationIndicators?: string[];
 }
 
 export class OllamaClient {
@@ -286,6 +288,132 @@ export class OllamaClient {
       let content = data.message?.content ?? '';
       console.log('� Returning text response, content length:', content.length);
 
+      // ----------- Embedded / Hallucinated Tool Call Recovery Layer -----------
+      // Some models (e.g. Qwen via Ollama) will return textual descriptions of tool calls
+      // or even paste JSON arrays in plain text without using the tool_calls field.
+      // 1) Try to extract any JSON tool call blocks.
+      // 2) If none, detect linguistic claims of completed actions (Spanish & English)
+      //    and force a retry with a strict system message OR synthesize minimal tool calls.
+
+      const extractEmbeddedToolCalls = (raw: string): any[] | null => {
+        try {
+          // Look for fenced ```json blocks first
+          const fenceMatch = raw.match(/```json[\r\n]+([\s\S]*?)```/i);
+          const candidates: string[] = [];
+          if (fenceMatch) candidates.push(fenceMatch[1]);
+          // Generic array pattern [ { "name": "tool" ... } ]
+            // Use non-greedy up to last closing bracket
+          const arrayMatch = raw.match(/(\[\s*\{[\s\S]+?\}\s*\])/);
+          if (arrayMatch) candidates.push(arrayMatch[1]);
+          for (const c of candidates) {
+            try {
+              const cleaned = c
+                .replace(/^[^\[]*\[/s, '[') // trim before first [
+                .replace(/\][^\]]*$/s, ']'); // trim after last ]
+              const parsed = JSON.parse(cleaned);
+              if (Array.isArray(parsed) && parsed.every(p => typeof p === 'object')) {
+                const mapped = parsed
+                  .filter(p => p && (p.name || p.function?.name))
+                  .map((p, i) => {
+                    const name = p.name || p.function?.name;
+                    const args = p.arguments || p.function?.arguments || p.function?.args || {};
+                    return {
+                      id: 'embedded_' + i + '_' + name,
+                      type: 'function',
+                      function: { name, arguments: args }
+                    };
+                  });
+                if (mapped.length) return mapped;
+              }
+            } catch (e) {
+              continue;
+            }
+          }
+        } catch (e) {
+          /* ignore */
+        }
+        return null;
+      };
+
+      const hallucinationPatterns: RegExp[] = [
+        /se (ha )?cread[oa]/i,
+        /carpeta[s]? (ha[n]? )?sido creada/i,
+        /archivo[s]? (ha[n]? )?sido (cread|guardad|generad)/i,
+        /he creado/i,
+        /he guardado/i,
+        /se (ha )?realizado una b[úu]squeda/i,
+        /todos los pasos han sido completados/i,
+        /directory (created|exported)/i,
+        /file (created|written|saved)/i
+      ];
+
+      const looksLikeHallucinatedActions = () => hallucinationPatterns.some(r => r.test(content));
+      let simulationIndicators: string[] = [];
+      if (!data.message?.tool_calls) {
+        simulationIndicators = hallucinationPatterns.filter(r=>r.test(content)).map(r=>r.toString());
+      }
+      if (!data.message?.tool_calls && supportsTools && selectedTools.length > 0) {
+        const embedded = extractEmbeddedToolCalls(content);
+        if (embedded && embedded.length) {
+          // Filter only embedded tools that exist in selectedTools set (avoid executing unknown / unsafe)
+          const allowedNames = new Set(selectedTools.map(t => t.name));
+          const filtered = embedded.filter(e => allowedNames.has(e.function.name));
+          if (filtered.length) {
+            console.log('🛠️ Recovered embedded tool calls from text response:', filtered.map(f => f.function.name).join(', '));
+            return { needsToolExecution: true, toolCalls: filtered, content: '' };
+          } else {
+            console.log('🛠️ Embedded tool JSON detected but no names matched allowed tools. Ignoring.');
+          }
+        }
+
+        if (looksLikeHallucinatedActions()) {
+            // Fall through to mark simulation
+          // Avoid infinite loops
+          if (!(req as any).__hallucinationRetryPerformed) {
+            console.log('⚠️ Detected textual claims of completed actions without tool_calls. Forcing retry.');
+            const strictMsg = 'HALLUCINATION_DETECTED: La respuesta anterior describi3 acciones (crear carpeta / escribir archivo / b9fsqueda) sin devolver tool_calls reales. Debes devolver exclusivamente JSON tool_calls reales sin narrativa si aplica. Usa solo uno o m21s de: ' + selectedTools.map(t => t.name).join(', ') + '. No afirmes completar acciones antes de ejecutarlas.';
+            const retryReq: ChatRequest = {
+              ...req,
+              messages: [
+                ...req.messages,
+                { role: 'system', content: strictMsg }
+              ]
+            } as any;
+            (retryReq as any).__hallucinationRetryPerformed = true;
+            return await this.generate(retryReq, tools);
+          } else if (!(req as any).__hallucinationSyntheticUsed) {
+            console.log('⚠️ Hallucination retry already performed. Attempting synthetic tool inference.');
+            // Simple inference: pick most plausible tool by keywords
+            const lc = content.toLowerCase();
+            const pick = (names: RegExp[]) => selectedTools.find(t => names.some(r => r.test(t.name)));
+            let chosen = pick([/export.*directory/i, /system_export_directory_listing/i]);
+            if (!chosen && /carpeta|directorio|folder|directory/.test(lc)) {
+              chosen = pick([/create.*directory/i, /system_create_directory/i]);
+            }
+            if (!chosen && /archivo|file|txt/.test(lc)) {
+              chosen = pick([/write.*file/i, /system_write_file/i]);
+            }
+            if (!chosen && selectedTools.length) chosen = selectedTools[0];
+            if (chosen) {
+              console.log('🧪 Synthesizing tool call due to persistent hallucination:', chosen.name);
+              (req as any).__hallucinationSyntheticUsed = true;
+              return {
+                needsToolExecution: true,
+                toolCalls: [
+                  {
+                    id: 'hallucination_synth_' + chosen.name,
+                    type: 'function',
+                    function: { name: chosen.name, arguments: {} }
+                  }
+                ],
+                content: ''
+              };
+            }
+          }
+        }
+      }
+      // ----------- End Recovery Layer -----------
+
       // If completely empty content and user likely wanted external action, attempt a forced retry
       if (!content.trim() && supportsTools && userWantsExternalAction && selectedTools.length > 0) {
         if ((req as any).__emptyRetryPerformed) {
@@ -384,7 +512,13 @@ export class OllamaClient {
           console.log('🧪 Synthetic fallback enabled but no suitable tool found.');
         }
       }
-      return { needsToolExecution: false, content };
+  const baseReturn: OllamaResponse = { needsToolExecution: false, content };
+      if (simulationIndicators.length && !baseReturn.needsToolExecution) {
+        baseReturn.simulationDetected = true;
+        baseReturn.simulationIndicators = simulationIndicators;
+        console.log('⚠️ Simulation detected (narrative action claims) without tool_calls. Indicators:', simulationIndicators.join(', '));
+      }
+      return baseReturn;
     } catch (error) {
       console.error('❌ Error calling Ollama API:', error);
       if (axios.isAxiosError(error)) {

@@ -1216,6 +1216,22 @@ ipcMain.handle('external-models:generate', async (event, modelId: string, messag
     if ((result as any).__timeout) {
       return { success: false, timeout: true, stage: 'initial', ms: MODEL_TIMEOUT_MS, error: `Model call timed out after ${MODEL_TIMEOUT_MS}ms` };
     }
+    // Emit initial partial content to renderer so user can see first answer before tool cycles
+    try {
+      if (result && result.content) {
+        event.sender.send('external-models:progress', {
+          modelId,
+          stage: 'initial',
+          cycle: 0,
+          content: result.content,
+          toolCalls: result.toolCalls || [],
+          needsToolExecution: !!result.needsToolExecution,
+          simulationDetected: (result as any).simulationDetected || false,
+          simulationIndicators: (result as any).simulationIndicators || [],
+          timestamp: Date.now()
+        });
+      }
+    } catch (e) { console.warn('⚠️ Failed to emit initial progress event', (e as any).message); }
     // JSON tool_calls fallback parsing for Anthropic if no structured toolCalls returned
     if (modelMeta?.provider==='anthropic' && !result.toolCalls && typeof result.content === 'string' && result.content.includes('"tool_calls"')) {
       try {
@@ -1244,6 +1260,62 @@ ipcMain.handle('external-models:generate', async (event, modelId: string, messag
         console.warn('⚠️ Failed to parse JSON tool_calls from Anthropic content:', (e as any).message);
       }
     }
+    // Additional loose / embedded tool_calls recovery (handles malformed or narrative-wrapped arrays)
+    if (modelMeta?.provider==='anthropic' && !result.toolCalls && typeof result.content==='string') {
+      try {
+        const raw = result.content;
+        // 1) Fenced code blocks ```json {"tool_calls": [...]} ```
+        const fenceMatches = raw.match(/```json[\r\n]+([\s\S]*?)```/gi) || [];
+        const candidates: string[] = [];
+  fenceMatches.forEach((block: string)=>{ const inner = block.replace(/```json[\r\n]+/i,'').replace(/```$/,''); candidates.push(inner); });
+        // 2) Direct tool_calls array pattern
+        const tcIndex = raw.indexOf('"tool_calls"');
+        if (tcIndex>=0) {
+          const arrStart = raw.indexOf('[', tcIndex);
+          if (arrStart>tcIndex) {
+            // naive bracket balance for array only
+            let depth=0; let found='';
+            for (let i=arrStart;i<raw.length;i++) {
+              const ch = raw[i];
+              found += ch;
+              if (ch==='[') depth++;
+              else if (ch===']') { depth--; if (depth===0) { break; } }
+            }
+            if (found.startsWith('[') && found.endsWith(']')) {
+              candidates.push('{"tool_calls":'+found+'}');
+            }
+          }
+        }
+        // 3) Plain array by itself
+        const plainArray = raw.match(/\[\s*\{[\s\S]+?\}\s*\]/);
+        if (plainArray) candidates.push('{"tool_calls":'+plainArray[0]+'}');
+        let recovered: any[] | null = null;
+        for (const cand of candidates) {
+          try {
+            const parsed = JSON.parse(cand);
+            if (parsed.tool_calls && Array.isArray(parsed.tool_calls) && parsed.tool_calls.length) {
+              recovered = parsed.tool_calls.map((c:any,i:number)=>({
+                id: c.id || 'anthropic_loose_tool_'+i,
+                type:'function',
+                function:{ name: c.name || c.function?.name, arguments: c.arguments || c.function?.arguments || {} }
+              }));
+              break;
+            }
+          } catch {/* ignore candidate parse */}
+        }
+        if (recovered && recovered.length) {
+          // Filter out obviously invalid names
+          const valid = recovered.filter(r=> typeof r.function.name === 'string' && r.function.name.length<120);
+          if (valid.length) {
+            console.log('🛠️ Recovered loose embedded tool_calls for Anthropic:', valid.map(v=>v.function.name).join(', '));
+            result.toolCalls = valid;
+            result.needsToolExecution = true;
+          }
+        }
+      } catch (e) {
+        console.warn('⚠️ Loose tool_calls recovery failed:', (e as any).message);
+      }
+    }
     // Heuristic enforcement: if Anthropic likely needed a tool (user intent) but produced a narrative claiming action without tool_calls, force a re-prompt.
     if (modelMeta?.provider==='anthropic' && !result.toolCalls) {
       const lastUser = [...workingMessages].reverse().find(m => m.role==='user');
@@ -1253,7 +1325,8 @@ ipcMain.handle('external-models:generate', async (event, modelId: string, messag
       const contentLower = (result.content||'').toLowerCase();
       // Phrases indicating the model is describing an action instead of calling a tool
       const hallucinationIndicators = [
-        'he tomado','he capturado','i have captured','screenshot','listado de archivos','file listing','abrí','he abierto','i opened','navegué','i navigated','ejecuté','i executed','comando ejecutado','proceso iniciado','captura guardada','saved screenshot','guardado en','saved at'
+        'he tomado','he capturado','i have captured','screenshot','listado de archivos','file listing','abrí','he abierto','i opened','navegué','i navigated','ejecuté','i executed','comando ejecutado','proceso iniciado','captura guardada','saved screenshot','guardado en','saved at',
+        'creé la carpeta','carpeta creada','archivo creado','file created','directory created','exportado a','he listado','listing complete','todos los pasos fueron completados'
       ];
       const seemsSimulated = hallucinationIndicators.some(p=>contentLower.includes(p));
       const alreadyForced = workingMessages.some(m=>m.role==='system' && /FORCE_TOOL_CALLS_ATTEMPT/.test(m.content));
@@ -1312,6 +1385,19 @@ ipcMain.handle('external-models:generate', async (event, modelId: string, messag
       while (currentResult.needsToolExecution && currentResult.toolCalls && cycle < MAX_CYCLES) {
         cycle++;
         console.log(`🔁 Tool cycle ${cycle} starting with ${currentResult.toolCalls.length} toolCalls`);
+        // Notify renderer that a new cycle is starting with declared tool calls
+        try {
+          event.sender.send('external-models:progress', {
+            modelId,
+            stage: 'cycle-start',
+            cycle,
+            toolCalls: currentResult.toolCalls,
+            content: currentResult.content || '',
+            simulationDetected: (currentResult as any).simulationDetected || false,
+            simulationIndicators: (currentResult as any).simulationIndicators || [],
+            timestamp: Date.now()
+          });
+        } catch (e) { console.warn('⚠️ Failed to emit cycle-start progress', (e as any).message); }
         const toolResults: any[] = [];
         // Execute each requested tool sequentially
         for (const toolCall of currentResult.toolCalls) {
@@ -1393,6 +1479,22 @@ ipcMain.handle('external-models:generate', async (event, modelId: string, messag
           clearTimeout(absoluteTimer);
             return { success: false, timeout: true, stage: `post-tools-cycle-${cycle}`, ms: MODEL_TIMEOUT_MS, partial: true, accumulatedToolExecutions, stageDurations };
         }
+        // Emit interim assistant content after model response this cycle before deciding next actions
+        try {
+          if (next && next.content) {
+            event.sender.send('external-models:progress', {
+              modelId,
+              stage: 'cycle-response',
+              cycle,
+              content: next.content,
+              toolCalls: next.toolCalls || [],
+              needsToolExecution: !!next.needsToolExecution,
+              simulationDetected: (next as any).simulationDetected || false,
+              simulationIndicators: (next as any).simulationIndicators || [],
+              timestamp: Date.now()
+            });
+          }
+        } catch (e) { console.warn('⚠️ Failed to emit cycle-response progress', (e as any).message); }
         // Attempt to parse further tool calls if provider Anthropic and raw content contains JSON
         if (modelMeta?.provider==='anthropic' && !next.toolCalls && typeof next.content==='string' && next.content.includes('"tool_calls"')) {
           try {
@@ -1422,6 +1524,7 @@ ipcMain.handle('external-models:generate', async (event, modelId: string, messag
         if (!currentResult.toolCalls || !currentResult.needsToolExecution) {
           console.log(`✅ Tool cycle loop completed at cycle ${cycle}`);
           clearTimeout(absoluteTimer);
+          try { event.sender.send('external-models:progress', { modelId, stage: 'complete', cycle, content: currentResult.content || '', simulationDetected: (currentResult as any).simulationDetected || false, simulationIndicators: (currentResult as any).simulationIndicators || [], timestamp: Date.now() }); } catch {}
           return { success: true, content: currentResult.content || currentResult, toolCycles: cycle, accumulatedToolExecutions, stageDurations, totalMs: Date.now()-handlerStart };
         }
         if (absoluteTimeoutHit) {
@@ -1432,6 +1535,7 @@ ipcMain.handle('external-models:generate', async (event, modelId: string, messag
       }
       // If loop ended due to cycle limit
       clearTimeout(absoluteTimer);
+  try { event.sender.send('external-models:progress', { modelId, stage: 'terminated', cycle, content: currentResult.content || '', reason: 'max_cycles_or_break', simulationDetected: (currentResult as any).simulationDetected || false, simulationIndicators: (currentResult as any).simulationIndicators || [], timestamp: Date.now() }); } catch {}
       return { success: true, content: currentResult.content || currentResult, toolCycles: cycle, loopTerminated: true, reason: 'max_cycles_or_break', accumulatedToolExecutions, stageDurations, totalMs: Date.now()-handlerStart };
     }
     const content = result.content ?? result;

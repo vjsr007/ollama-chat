@@ -54,7 +54,10 @@ export const externalModelsApi = {
   toggle: (id: string, enabled: boolean) => ipcRenderer.invoke('external-models:toggle', id, enabled),
   validateKey: (provider: string, apiKey: string, endpoint?: string) => ipcRenderer.invoke('external-models:validate-key', provider, apiKey, endpoint),
   validateModel: (id: string) => ipcRenderer.invoke('external-models:validate-model', id),
-  generate: (id: string, messages: any[]) => ipcRenderer.invoke('external-models:generate', id, messages)
+  generate: (id: string, messages: any[]) => ipcRenderer.invoke('external-models:generate', id, messages),
+  onProgress: (cb: (payload: any) => void) => {
+    ipcRenderer.on('external-models:progress', (_e, data) => cb(data));
+  }
 };
 
 export const logsApi = {
@@ -62,11 +65,36 @@ export const logsApi = {
   clear: () => ipcRenderer.invoke('logs:clear')
 };
 
+// Whisper IPC helper: accept ArrayBuffer/Uint8Array/number[] and convert safely to Buffer here (Node context)
+export const whisperApi = {
+  transcribe: (audioData: Buffer | ArrayBuffer | Uint8Array | number[], endpoint: string, language?: string) => {
+    let buf: Buffer;
+    try {
+      if (Buffer.isBuffer(audioData)) buf = audioData as Buffer;
+      else if (audioData instanceof Uint8Array) buf = Buffer.from(audioData);
+      else if (audioData instanceof ArrayBuffer) buf = Buffer.from(new Uint8Array(audioData));
+      else if (Array.isArray(audioData)) buf = Buffer.from(audioData);
+      else throw new Error('Unsupported audio data type');
+    } catch (e) {
+      console.warn('whisperApi.transcribe: failed to build Buffer', e);
+      throw e;
+    }
+    return ipcRenderer.invoke('whisper:transcribe', { audioData: buf, endpoint, language });
+  }
+};
+
+// (Legacy) node API exposure retained for backward compatibility (not needed for STT now)
+export const nodeApi = {
+  Buffer: Buffer
+};
+
 contextBridge.exposeInMainWorld('ollama', api);
 contextBridge.exposeInMainWorld('mcp', mcpApi);
 contextBridge.exposeInMainWorld('electronAPI', electronApi);
 contextBridge.exposeInMainWorld('externalModels', externalModelsApi);
 contextBridge.exposeInMainWorld('logs', logsApi);
+contextBridge.exposeInMainWorld('whisper', whisperApi);
+contextBridge.exposeInMainWorld('nodeAPI', nodeApi);
 
 declare global {
   interface Window {

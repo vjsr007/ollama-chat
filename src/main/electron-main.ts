@@ -788,6 +788,78 @@ ipcMain.handle('logs:clear', async () => {
   logBuffer.length = 0; return { success: true };
 });
 
+// Whisper transcription handler (avoid CORS issues)
+ipcMain.handle('whisper:transcribe', async (event, options: { audioData: Buffer, endpoint: string, language?: string }) => {
+  console.log('🎙️ Main: Whisper transcription request, endpoint:', options.endpoint, 'language:', options.language);
+  try {
+    const FormData = require('form-data');
+    const fetch = require('node-fetch');
+    // Normalize incoming binary (IPC may have transformed Buffer -> Uint8Array)
+    let dataBuf: Buffer;
+    const raw: any = options.audioData as any;
+    try {
+      if (Buffer.isBuffer(raw)) dataBuf = raw as Buffer;
+      else if (raw instanceof Uint8Array) dataBuf = Buffer.from(raw);
+      else if (raw && raw.type === 'Buffer' && Array.isArray(raw.data)) dataBuf = Buffer.from(raw.data);
+      else if (raw?.buffer instanceof ArrayBuffer) dataBuf = Buffer.from(new Uint8Array(raw.buffer));
+      else throw new Error(`Unsupported audio data type (ctor=${raw?.constructor?.name})`);
+    } catch (normErr) {
+      console.error('🎙️ Main: Failed to normalize audio data:', normErr);
+      return { success: false, error: 'Audio data inválido: ' + (normErr instanceof Error ? normErr.message : String(normErr)) };
+    }
+    console.log('🎙️ Main: Audio data normalized length:', dataBuf.length, 'isBuffer:', Buffer.isBuffer(dataBuf));
+
+    const form = new FormData();
+    const fileOptions = { filename: 'audio.webm', contentType: 'audio/webm' } as any;
+    form.append('file', dataBuf, fileOptions);
+    // Add common alternative field names for broader server compatibility (harmless duplicates)
+    if (!options.endpoint.includes('v1/audio/transcriptions')) {
+      try { form.append('audio', dataBuf, fileOptions); } catch {}
+      try { form.append('audio_file', dataBuf, fileOptions); } catch {}
+    }
+    
+    // Handle different endpoint formats
+    if (options.endpoint.includes('v1/audio/transcriptions')) {
+      // OpenAI-compatible format
+      form.append('model', 'whisper-1');
+      if (options.language && options.language !== 'auto') {
+        form.append('language', options.language.split('-')[0]); // es-ES -> es
+      }
+    } else {
+      // Custom format
+      form.append('lang', options.language || 'auto');
+    }
+    
+    const response = await fetch(options.endpoint, {
+      method: 'POST',
+      body: form,
+      headers: form.getHeaders()
+    });
+    
+  if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      throw new Error(`HTTP ${response.status} - ${response.statusText}${errorText ? ': ' + errorText : ''}`);
+    }
+    
+    const result = await response.json();
+    const text = result.text || result.transcription || '';
+    
+    console.log('🎙️ Main: Whisper transcription result:', text);
+    return { success: true, text };
+    
+  } catch (error) {
+    console.error('🎙️ Main: Whisper transcription failed:', error);
+    let errorMsg = error instanceof Error ? error.message : String(error);
+    
+    // Provide helpful error messages
+    if (errorMsg.includes('ECONNREFUSED') || errorMsg.includes('fetch failed')) {
+      errorMsg = 'No se pudo conectar al servidor Whisper. ¿Está corriendo en ' + options.endpoint + '?';
+    }
+    
+  return { success: false, error: errorMsg };
+  }
+});
+
 // MCP directory (search & metadata) handlers
 try {
   const { searchMcpDirectory, mcpDirectory } = require('../../shared/domain/mcpDirectory');

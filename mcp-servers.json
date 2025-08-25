@@ -189,5 +189,16 @@
         "category": "media",
         "enabled": false
       }
+      ,
+      "linkedin": {
+        "type": "stdio",
+        "command": "node",
+        "args": [
+          "integration-servers/linkedin-server.js"
+        ],
+        "description": "LinkedIn basic profile & post text (OAuth2 required)",
+        "category": "social",
+        "enabled": false
+      }
   }
 }

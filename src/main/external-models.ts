@@ -36,6 +36,8 @@ export class ExternalModelManager {
     // Service name for keytar (stable, unique)
     this.serviceName = 'ollama-chat-external-model';
     this.config = this.loadConfig();
+  // Ensure baseline (placeholder) models exist (e.g., upcoming versions like ChatGPT-5)
+  try { this.ensureBaselineModels(); } catch (e) { console.warn('ensureBaselineModels failed', e); }
   }
 
   private loadConfig(): ExternalModelConfig {
@@ -156,6 +158,31 @@ export class ExternalModelManager {
 
   public getEnabledModels(): ExternalModel[] {
     return this.config.models.filter(m => m.enabled);
+  }
+
+  // Insert baseline suggested models (non-intrusive): only added if not already present.
+  private ensureBaselineModels() {
+    const baseline: Omit<ExternalModel, 'id'>[] = [
+      {
+        name: 'ChatGPT 5 (Preview)',
+        provider: 'openai',
+        model: 'gpt-5', // Placeholder future model identifier (user can edit/change once official)
+        description: 'Placeholder for future OpenAI GPT-5 model. Enable once available to route calls with your OpenAI key.',
+        enabled: false,
+        maxTokens: 8192,
+        temperature: 0.7
+      }
+    ];
+    let changed = false;
+    for (const b of baseline) {
+      const exists = this.config.models.find(m => m.provider === b.provider && m.model === b.model);
+      if (!exists) {
+        const newModel: ExternalModel = { ...b, id: 'baseline-' + b.provider + '-' + b.model };
+        this.config.models.push(newModel);
+        changed = true;
+      }
+    }
+    if (changed) this.saveConfig();
   }
 
   public addModel(model: Omit<ExternalModel, 'id'>): ExternalModel {

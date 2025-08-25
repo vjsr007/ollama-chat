@@ -2,29 +2,29 @@
 
 This document explains how the app acts as the **MCP host** and how **MCP servers (clients)** integrate with it.
 
-## Componentes Principales
+## Main Components
 
 - **MCP Host**: `src/shared/infrastructure/mcp/McpManager.ts`
   - Loads configuration (`mcp-servers.json`, `mcp-config-simple.json`, etc.).
   - Spawns server processes via `spawn` (stdio JSON-RPC).
   - Performs handshake: `initialize` → `notifications/initialized` → `tools/list`.
   - Manages tool concurrency queue, timeouts, and line-by-line JSON parsing.
-  - Exposes built‑in safe filesystem tools: `list_dir`, `read_file`, `write_file`, `path_info`.
+  - Exposes built-in safe filesystem tools: `list_dir`, `read_file`, `write_file`, `path_info`.
 
 - **MCP Servers (clients)**: under `integration-servers/` and `unsafe-servers/`.
   - Reusable base: `integration-servers/base-jsonrpc-server.js` (implements `initialize`, `tools/list`, `tools/call`).
   - Examples: `spotify-server.js`, `facebook-instagram-server.js`, `outlook-server.js`, `linkedin-server.js`, `puppeteer-server.js`.
   - Potentially dangerous servers (disabled by default): `unsafe-servers/system-access-server.js`, `unsafe-servers/process-control-server.js`.
 
-## Flujo de Inicio (Handshake)
+## Startup Flow (Handshake)
 
 ```plantuml
 @startuml
-actor Usuario as U
+actor User as U
 participant "UI Renderer" as UI
 participant "McpManager\n(MCP Host)" as Host
-participant "Servidor MCP\n(p.ej. linkedin-server.js)" as S
-U -> UI: Activa servidor
+participant "MCP Server\n(e.g. linkedin-server.js)" as S
+U -> UI: Activate server
 UI -> Host: startServer(id)
 Host -> Host: spawn(command,args)
 Host -> S: initialize {id:init-...}
@@ -32,14 +32,14 @@ S --> Host: result (serverInfo)
 Host -> S: notifications/initialized
 Host -> S: tools/list {id:tools-...}
 S --> Host: result [tools]
-Host -> UI: Evento tools-updated
+Host -> UI: tools-updated event
 @enduml
 ```
 
 ASCII:
 
 ```text
-Usuario -> UI -> McpManager -> (spawn) Server
+User -> UI -> McpManager -> (spawn) Server
 McpManager => Server: initialize
 Server => McpManager: result
 McpManager => Server: notifications/initialized
@@ -52,18 +52,18 @@ McpManager => UI: tools-updated
 
 ```plantuml
 @startuml
-actor Usuario as U
+actor User as U
 participant UI
 participant McpManager as Host
 participant Servidor as S
-U -> UI: Invoca tool (linkedin_post_text)
+U -> UI: Invoke tool (linkedin_post_text)
 UI -> Host: callTool(tool,args)
 Host -> Host: findServerForTool()
 Host -> S: tools/call {name,arguments}
 S --> S: invoke()
 S --> Host: result {content:[{text:...}]}
-Host -> UI: Resultado normalizado
-UI -> U: Mostrar
+Host -> UI: Normalized result
+UI -> U: Show
 @enduml
 ```
 
@@ -75,7 +75,7 @@ participant McpManager as Host
 participant "linkedin-server.js" as S
 participant "LinkedIn API" as API
 Host -> S: tools/call linkedin_post_text {text}
-S -> S: postText() prepara body
+S -> S: postText() prepares body
 S -> API: POST /ugcPosts (Bearer LINKEDIN_ACCESS_TOKEN)
 API --> S: 201 + JSON (urn del post)
 S --> Host: result {content:[{text:'{...json...}'}]}
@@ -124,8 +124,8 @@ A disabled placeholder model (`gpt-5`) is automatically added in `ExternalModelM
 
 ## Key Files Summary
 
-| Rol | Archivo |
-|-----|---------|
+| Role | File |
+|------|------|
 | MCP Host | `src/shared/infrastructure/mcp/McpManager.ts` |
 | Base JSON-RPC server | `integration-servers/base-jsonrpc-server.js` |
 | LinkedIn example | `integration-servers/linkedin-server.js` |

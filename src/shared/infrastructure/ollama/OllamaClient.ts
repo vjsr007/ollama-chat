@@ -85,7 +85,6 @@ export class OllamaClient {
               }
             }
           ],
-          content: ''
         } as any;
         console.log('⚡ Detected direct export instruction. Auto-generating tool call:', JSON.stringify(directExportToolCall.toolCalls[0].function.arguments));
       }
@@ -371,7 +370,7 @@ export class OllamaClient {
           // Avoid infinite loops
           if (!(req as any).__hallucinationRetryPerformed) {
             console.log('⚠️ Detected textual claims of completed actions without tool_calls. Forcing retry.');
-            const strictMsg = 'HALLUCINATION_DETECTED: La respuesta anterior describi3 acciones (crear carpeta / escribir archivo / b9fsqueda) sin devolver tool_calls reales. Debes devolver exclusivamente JSON tool_calls reales sin narrativa si aplica. Usa solo uno o m21s de: ' + selectedTools.map(t => t.name).join(', ') + '. No afirmes completar acciones antes de ejecutarlas.';
+            const strictMsg = 'HALLUCINATION_DETECTED: The previous response claimed actions (create folder / write file / search) without returning real tool_calls. Return ONLY JSON tool_calls (no narrative) if applicable. Use one or more of: ' + selectedTools.map(t => t.name).join(', ') + '. Do NOT claim completion before executing tools.';
             const retryReq: ChatRequest = {
               ...req,
               messages: [
@@ -418,14 +417,14 @@ export class OllamaClient {
       if (!content.trim() && supportsTools && userWantsExternalAction && selectedTools.length > 0) {
         if ((req as any).__emptyRetryPerformed) {
           console.log('⚠️ Empty response after retry; returning synthetic guidance.');
-          content = 'El modelo devolvió una respuesta vacía. Intenta de nuevo o especifica más detalle. Puedes volver a pedir: "exporta el listado del directorio usando system_export_directory_listing".';
+          content = 'The model returned an empty response. Try again or provide more detail. You can request again: "export the directory listing using system_export_directory_listing".';
         } else {
           console.log('♻️ Empty response detected. Performing forced retry with stronger system message.');
           const retryReq: ChatRequest = {
             ...req,
             messages: [
               ...req.messages,
-              { role: 'system', content: 'FORCE_TOOL_DECISION_EMPTY: La respuesta anterior estuvo vacía. Debes llamar a uno de los tools disponibles (' + selectedTools.map(t => t.name).join(', ') + ') si aplica.' }
+              { role: 'system', content: 'FORCE_TOOL_DECISION_EMPTY: The previous response was empty. You MUST call one of the available tools (' + selectedTools.map(t => t.name).join(', ') + ') if relevant.' }
             ]
           } as any;
           (retryReq as any).__emptyRetryPerformed = true;

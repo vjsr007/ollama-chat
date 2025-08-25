@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 // LinkedIn MCP server.
-// Herramientas:
-//  - linkedin_generate_auth_url: genera URL OAuth2 para usuario.
-//  - linkedin_exchange_code: intercambia ?code= por access token (devolver, NO persiste salvo que configures).
-//  - linkedin_profile: obtiene perfil básico.
-//  - linkedin_post_text: publica un post de texto simple en el perfil del usuario autenticado.
-// Requisitos:
-//  Variables de entorno:
+// Tools provided:
+//  - linkedin_generate_auth_url: generate OAuth2 authorization URL for the user.
+//  - linkedin_exchange_code: exchange the returned ?code= for an access token (returns it, does NOT persist unless you add storage).
+//  - linkedin_profile: fetch basic profile details.
+//  - linkedin_post_text: publish a simple text post to the authenticated user's profile.
+// Requirements:
+//  Environment variables:
 //   LINKEDIN_CLIENT_ID, LINKEDIN_CLIENT_SECRET, LINKEDIN_REDIRECT_URI
-//   LINKEDIN_ACCESS_TOKEN (access token obtenido) (opcional si usarás exchange_code primero)
-//   LINKEDIN_SCOPES (opcional, por defecto: r_liteprofile w_member_social)
-// NOTA: Para producción conviene almacenar/renovar tokens (refresh tokens) y no exponerlos en texto plano.
+//   LINKEDIN_ACCESS_TOKEN (obtained access token) (optional if you will call exchange_code first)
+//   LINKEDIN_SCOPES (optional, defaults to: r_liteprofile w_member_social)
+// NOTE: For production you should securely store & refresh tokens (refresh tokens) and avoid plain‑text exposure.
 
 const { JsonRpcServer } = require('./base-jsonrpc-server.js');
 const querystring = require('node:querystring');
@@ -23,7 +23,7 @@ function requireEnv(name) {
 
 async function linkedinApi(path, { method = 'GET', body } = {}) {
   const token = process.env.LINKEDIN_ACCESS_TOKEN;
-  if (!token) throw new Error('Missing LINKEDIN_ACCESS_TOKEN (usa linkedin_exchange_code o configura manualmente)');
+  if (!token) throw new Error('Missing LINKEDIN_ACCESS_TOKEN (use linkedin_exchange_code first or set it manually)');
   const url = (path.startsWith('http') ? path : 'https://api.linkedin.com/v2' + path);
   const headers = {
     'Authorization': `Bearer ${token}`,
@@ -89,33 +89,33 @@ async function postText(content) {
     },
     visibility: { 'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC' }
   };
-  // Endpoint ugcPosts (legacy v2). Newer API may use /rest/posts (requires different schema). Mantener simple aquí.
+  // Endpoint ugcPosts (legacy v2). Newer API may use /rest/posts (different schema). Keeping it simple here.
   const res = await linkedinApi('/ugcPosts', { method: 'POST', body });
-  return { post: res, note: 'Si falla, revisa que la app tenga w_member_social aprobada y que uses UGC API.' };
+  return { post: res, note: 'If it fails, ensure the app has w_member_social approved and that you are using the UGC API.' };
 }
 
 const tools = () => [
   {
     name: 'linkedin_generate_auth_url',
-    description: 'Genera la URL de autorización OAuth2 para LinkedIn (abre en el navegador y autoriza).',
+  description: 'Generate the LinkedIn OAuth2 authorization URL (open it in a browser and authorize).',
     inputSchema: { type: 'object', properties: {} },
     invoke: async () => buildAuthUrl()
   },
   {
     name: 'linkedin_exchange_code',
-    description: 'Intercambia el parámetro ?code= recibido tras la autorización por un access token (devuelve el token).',
+  description: 'Exchange the ?code= received after authorization for an access token (returns the token).',
     inputSchema: { type: 'object', properties: { code: { type: 'string' } }, required: ['code'] },
     invoke: async ({ code }) => exchangeCode(code)
   },
     {
       name: 'linkedin_profile',
-      description: 'Obtiene el perfil básico del usuario autenticado (/me).',
+  description: 'Fetch basic profile information for the authenticated user (/me).',
       inputSchema: { type: 'object', properties: {} },
       invoke: async () => linkedinApi('/me')
     },
     {
       name: 'linkedin_post_text',
-      description: 'Publica un post de texto simple en tu perfil.',
+  description: 'Publish a simple text post to your profile.',
       inputSchema: { type: 'object', properties: { text: { type: 'string', description: 'Contenido del post' } }, required: ['text'] },
       invoke: async ({ text }) => postText(text)
     }

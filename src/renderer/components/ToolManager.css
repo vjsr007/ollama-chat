@@ -1,4 +1,4 @@
-/* ToolManager.css - Estilos para el gestor de herramientas */
+/* ToolManager.css - Styles for the tool manager */
 
 /* Overlay y contenedor principal */
 .tool-manager-overlay {
@@ -284,7 +284,7 @@
   transform: translateY(-2px);
 }
 
-/* Lista de herramientas */
+/* Tool list */
 .tools-list {
   display: flex;
   flex-direction: column;
@@ -429,7 +429,7 @@ input:checked + .toggle-slider:before {
   transform: translateX(26px);
 }
 
-/* Mensaje de no herramientas */
+/* No tools message */
 .no-tools {
   text-align: center;
   padding: 40px;

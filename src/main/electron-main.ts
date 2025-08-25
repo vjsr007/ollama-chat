@@ -252,7 +252,7 @@ ipcMain.handle('chat', async (event, request) => {
     }
     // If no tool execution and content empty, create explicit placeholder to avoid UI generic empty warning
     if (!result.content || !result.content.trim()) {
-      return '⚠️ (Modelo devolvió contenido vacío tras generación sin tools)';
+      return '⚠️ (Model returned empty content after generation without tools)';
     }
     return result.content;
   } catch (error) {
@@ -1536,9 +1536,9 @@ ipcMain.handle('external-models:generate', async (event, modelId: string, messag
               }
             }).join('\n\n');
             const anthroToolMsg = { role: 'user', content: [
-              'RESULTADOS_DE_HERRAMIENTAS Ciclo '+cycle+'. Usa SOLO estos datos para el siguiente paso.',
+              'TOOL_RESULTS Cycle '+cycle+'. Use ONLY these data for the next step.',
               condensed,
-              'Si todavía faltan pasos (navegar, buscar, screenshot, guardar archivos), pide / ejecuta la siguiente herramienta con JSON tool_calls. Si ya terminaste todo, entrega la explicación final y NO generes más tool_calls.'
+              'If steps remain (navigate, search, screenshot, save files), request / execute the next tool with JSON tool_calls. If everything is complete, provide the final explanation and DO NOT generate more tool_calls.'
             ].join('\n\n') };
             followUpMessages = [...working, { role: 'assistant', content: currentResult.content || '' }, anthroToolMsg];
           } catch (e) {
